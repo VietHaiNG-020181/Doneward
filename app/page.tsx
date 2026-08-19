@@ -115,6 +115,7 @@ export default function Home() {
   const [focusId, setFocusId] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>("default");
+  const [showReminderPrompt, setShowReminderPrompt] = useState(true);
   const [dayLabel, setDayLabel] = useState("TODAY");
   const [welcome, setWelcome] = useState("Welcome back.");
   const tickRef = useRef<number | null>(null);
@@ -238,7 +239,7 @@ export default function Home() {
 
       {editing && <TaskModal task={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} onSave={saveTask} onDelete={editing === "new" ? undefined : () => { setTasks((current) => current.filter((task) => task.id !== editing.id)); setEditing(null); }} />}
       {focusTask && <FocusModal task={focusTask} running={running} onToggle={() => setRunning((value) => !value)} onDone={() => { setRunning(false); toggleComplete(focusTask); setFocusId(null); }} onClose={() => { setRunning(false); setFocusId(null); }} />}
-      {notificationPermission !== "granted" && ready && <div className="reminder-prompt"><span>◎</span><div><strong>Stay gently accountable</strong><small>Turn on reminders for tasks that still need focus.</small></div><button onClick={enableNotifications}>Enable</button><button className="dismiss" onClick={(event) => event.currentTarget.parentElement?.remove()} aria-label="Dismiss">×</button></div>}
+      {notificationPermission !== "granted" && ready && showReminderPrompt && <div className="reminder-prompt"><span>◎</span><div><strong>Stay gently accountable</strong><small>Turn on reminders for tasks that still need focus.</small></div><button onClick={enableNotifications}>Enable</button><button className="dismiss" onClick={() => setShowReminderPrompt(false)} aria-label="Dismiss">×</button></div>}
     </main>
   );
 }
