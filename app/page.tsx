@@ -205,6 +205,7 @@ export default function Home() {
           <Nav active={view === "all"} onClick={() => setView("all")} symbol="○" label="All tasks" count={activeTasks.length} />
           <Nav active={view === "upcoming"} onClick={() => setView("upcoming")} symbol="□" label="Upcoming" />
           <Nav active={view === "history"} onClick={() => setView("history")} symbol="◷" label="Focus history" />
+          <a className="nav-item" href="/feed-check"><span>↻</span> Feed check <em>Spike</em></a>
         </nav>
         <div className="sidebar-bottom">
           <div className="streak-card"><span className="flame">♦</span><div><strong>{Math.min(7, completed.length + 3)} day streak</strong><small>Keep the momentum going</small></div></div>
