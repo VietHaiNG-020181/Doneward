@@ -12,3 +12,6 @@ test("server-renders Doneward", async () => {
 test("server-renders the Brightspace feed checker", async () => {
   const response = await render("/feed-check"); assert.equal(response.status, 200); const html = await response.text(); assert.match(html, /Brightspace/); assert.match(html, /never uploaded or saved/);
 });
+test("server-renders the user-reviewed Brightspace inbox", async () => {
+  const response = await render("/brightspace-inbox"); assert.equal(response.status, 200); const html = await response.text(); assert.match(html, /New schoolwork/); assert.match(html, /Nothing enters your plan until you review it/);
+});

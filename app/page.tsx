@@ -1,54 +1,9 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { loadInbox, loadTasks, saveTasks, type Importance, type Task } from "@/lib/doneward-store";
 
-type Importance = "Low" | "Medium" | "High";
 type View = "today" | "all" | "upcoming" | "history";
-type Task = {
-  id: string;
-  title: string;
-  notes: string;
-  deadline: string;
-  targetMinutes: number;
-  focusedSeconds: number;
-  importance: Importance;
-  reminderMinutes: number;
-  nextReminderAt: number;
-  completed: boolean;
-  completedAt?: number;
-  createdAt: number;
-};
-
-const DB_NAME = "doneward-db";
-const STORE = "app-state";
-
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onupgradeneeded = () => request.result.createObjectStore(STORE);
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function loadTasks(): Promise<Task[] | undefined> {
-  const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const request = db.transaction(STORE).objectStore(STORE).get("tasks");
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function saveTasks(tasks: Task[]) {
-  const db = await openDb();
-  return new Promise<void>((resolve, reject) => {
-    const transaction = db.transaction(STORE, "readwrite");
-    transaction.objectStore(STORE).put(tasks, "tasks");
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
-  });
-}
 
 function localInputDate(date: Date) {
   const adjusted = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
@@ -118,10 +73,12 @@ export default function Home() {
   const [showReminderPrompt, setShowReminderPrompt] = useState(true);
   const [dayLabel, setDayLabel] = useState("TODAY");
   const [welcome, setWelcome] = useState("Welcome back.");
+  const [inboxCount, setInboxCount] = useState(0);
   const tickRef = useRef<number | null>(null);
 
   useEffect(() => {
     loadTasks().then((saved) => setTasks(saved?.length ? saved : starterTasks())).finally(() => setReady(true));
+    loadInbox().then((items) => setInboxCount(items?.length ?? 0));
     if ("Notification" in window) setNotificationPermission(Notification.permission);
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     const now = new Date();
@@ -178,6 +135,7 @@ export default function Home() {
       deadline: String(form.get("deadline")), targetMinutes: Number(form.get("targetMinutes")), focusedSeconds: existing?.focusedSeconds ?? 0,
       importance: form.get("importance") as Importance, reminderMinutes, nextReminderAt: Date.now() + reminderMinutes * 60000,
       completed: existing?.completed ?? false, completedAt: existing?.completedAt, createdAt: existing?.createdAt ?? Date.now(),
+      source: existing?.source ?? "manual", sourceUid: existing?.sourceUid, course: existing?.course, assessmentType: existing?.assessmentType, originalDeadline: existing?.originalDeadline,
     };
     setTasks((current) => existing ? current.map((item) => item.id === task.id ? task : item) : [...current, task]);
     setEditing(null);
@@ -194,7 +152,7 @@ export default function Home() {
     setNotificationPermission(result);
   }
 
-  function openFocus(id: string) { setFocusId(id); setRunning(true); }
+  function openFocus(id: string) { if (tasks.find((task) => task.id === id)?.targetMinutes === 0) return; setFocusId(id); setRunning(true); }
 
   return (
     <main className="app-shell">
@@ -205,7 +163,8 @@ export default function Home() {
           <Nav active={view === "all"} onClick={() => setView("all")} symbol="○" label="All tasks" count={activeTasks.length} />
           <Nav active={view === "upcoming"} onClick={() => setView("upcoming")} symbol="□" label="Upcoming" />
           <Nav active={view === "history"} onClick={() => setView("history")} symbol="◷" label="Focus history" />
-          <a className="nav-item" href="/feed-check"><span>↻</span> Feed check <em>Spike</em></a>
+          <a className="nav-item" href="/brightspace-inbox"><span>↳</span> New from Brightspace {inboxCount > 0 && <b>{inboxCount}</b>}</a>
+          <a className="nav-item" href="/feed-check"><span>↻</span> Feed check</a>
         </nav>
         <div className="sidebar-bottom">
           <div className="streak-card"><span className="flame">♦</span><div><strong>{Math.min(7, completed.length + 3)} day streak</strong><small>Keep the momentum going</small></div></div>
@@ -220,9 +179,9 @@ export default function Home() {
         </header>
 
         {nextTask ? <section className="next-card">
-          <div className="next-copy"><span className="label">DO NEXT</span><h2>{nextTask.title}</h2><p>{deadlineLabel(nextTask.deadline)} <span className="dot">·</span> {formatDuration(nextTask.targetMinutes - nextTask.focusedSeconds / 60)} remaining</p></div>
-          <Progress task={nextTask} />
-          <button className="focus-button" onClick={() => openFocus(nextTask.id)}><span>▶</span> Start focus</button>
+          <div className="next-copy"><span className="label">DO NEXT</span><h2>{nextTask.title}</h2><p>{deadlineLabel(nextTask.deadline)} <span className="dot">·</span> {nextTask.targetMinutes > 0 ? `${formatDuration(nextTask.targetMinutes - nextTask.focusedSeconds / 60)} remaining` : "Deadline only"}</p></div>
+          {nextTask.targetMinutes > 0 && <Progress task={nextTask} />}
+          <button className="focus-button" onClick={() => nextTask.targetMinutes > 0 ? openFocus(nextTask.id) : toggleComplete(nextTask)}><span>{nextTask.targetMinutes > 0 ? "▶" : "✓"}</span> {nextTask.targetMinutes > 0 ? "Start focus" : "Mark complete"}</button>
         </section> : <section className="next-card empty-next"><div className="next-copy"><span className="label">ALL CLEAR</span><h2>You&apos;re caught up.</h2><p>Add a task when you&apos;re ready for the next step.</p></div><button className="focus-button" onClick={() => setEditing("new")}>Add a task</button></section>}
 
         <div className="summary-row">
@@ -250,25 +209,25 @@ function Nav({ active, onClick, symbol, label, count }: { active: boolean; onCli
 }
 
 function Progress({ task }: { task: Task }) {
-  const progress = Math.min(100, Math.round(task.focusedSeconds / 60 / task.targetMinutes * 100));
+  const progress = Math.min(100, Math.round(task.focusedSeconds / 60 / Math.max(1, task.targetMinutes) * 100));
   return <div className="progress-ring" style={{ "--progress": `${progress}%` } as React.CSSProperties} aria-label={`${progress} percent complete`}><span>{progress}%</span></div>;
 }
 
 function TaskCard({ task, urgent, onComplete, onFocus, onEdit }: { task: Task; urgent?: boolean; onComplete: () => void; onFocus: () => void; onEdit: () => void }) {
   const remaining = task.targetMinutes - task.focusedSeconds / 60;
-  const progress = Math.min(100, Math.round(task.focusedSeconds / 60 / task.targetMinutes * 100));
+  const progress = Math.min(100, Math.round(task.focusedSeconds / 60 / Math.max(1, task.targetMinutes) * 100));
   const overdue = new Date(task.deadline).getTime() < Date.now() && !task.completed;
   return <article className={`task-card ${urgent ? "urgent" : ""} ${task.completed ? "done" : ""}`}>
     <button className="check" onClick={onComplete} aria-label={`${task.completed ? "Reopen" : "Complete"} ${task.title}`}>{task.completed ? "✓" : ""}</button>
-    <div className="task-main" onDoubleClick={onEdit}><h3>{task.title}</h3><p>{task.completed ? `${formatDuration(task.focusedSeconds / 60)} focused` : `${formatDuration(remaining)} remaining of ${formatDuration(task.targetMinutes)}`}</p>{!task.completed && <div className="bar"><span style={{ width: `${progress}%` }} /></div>}</div>
+    <div className="task-main" onDoubleClick={onEdit}><h3>{task.title}</h3>{task.course && <span className="course-line">{task.course} · {task.assessmentType}</span>}<p>{task.completed ? (task.targetMinutes ? `${formatDuration(task.focusedSeconds / 60)} focused` : "Completed") : task.targetMinutes ? `${formatDuration(remaining)} remaining of ${formatDuration(task.targetMinutes)}` : "Deadline only"}</p>{!task.completed && task.targetMinutes > 0 && <div className="bar"><span style={{ width: `${progress}%` }} /></div>}</div>
     <div className="task-meta"><span className={`tag ${overdue || urgent ? "coral" : !isToday(task.deadline) ? "blue" : ""}`}>{deadlineLabel(task.deadline)}</span><span>{task.importance}</span></div>
-    {!task.completed && <button className="mini-focus" onClick={onFocus} aria-label={`Focus on ${task.title}`}>▶</button>}<button className="more" onClick={onEdit} aria-label={`Edit ${task.title}`}>···</button>
+    {!task.completed && task.targetMinutes > 0 && <button className="mini-focus" onClick={onFocus} aria-label={`Focus on ${task.title}`}>▶</button>}<button className="more" onClick={onEdit} aria-label={`Edit ${task.title}`}>···</button>
   </article>;
 }
 
 function TaskModal({ task, onClose, onSave, onDelete }: { task?: Task; onClose: () => void; onSave: (event: FormEvent<HTMLFormElement>) => void; onDelete?: () => void }) {
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="task-modal-title"><div className="modal-head"><div><span className="label dark">{task ? "EDIT TASK" : "NEW TASK"}</span><h2 id="task-modal-title">{task ? "Shape the next step" : "What needs your focus?"}</h2></div><button onClick={onClose} aria-label="Close">×</button></div>
-    <form onSubmit={onSave}><label>Task name<input name="title" defaultValue={task?.title} placeholder="e.g. Draft project proposal" required autoFocus /></label><label>Notes<textarea name="notes" defaultValue={task?.notes} placeholder="A useful first step, context, or definition of done" rows={3} /></label><div className="form-grid"><label>Deadline<input type="datetime-local" name="deadline" defaultValue={task?.deadline ?? dateAt(0, 17)} required /></label><label>Focus target<select name="targetMinutes" defaultValue={task?.targetMinutes ?? 60}><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60">1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option><option value="180">3 hours</option><option value="240">4 hours</option></select></label><label>Importance<select name="importance" defaultValue={task?.importance ?? "Medium"}><option>Low</option><option>Medium</option><option>High</option></select></label><label>Remind me<select name="reminderMinutes" defaultValue={task?.reminderMinutes ?? 30}><option value="10">Every 10 minutes</option><option value="30">Every 30 minutes</option><option value="60">Every hour</option><option value="120">Every 2 hours</option></select></label></div><div className="modal-actions">{onDelete && <button type="button" className="delete-button" onClick={onDelete}>Delete</button>}<span /><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit">{task ? "Save changes" : "Add task"}</button></div></form>
+    <form onSubmit={onSave}><label>Task name<input name="title" defaultValue={task?.title} placeholder="e.g. Draft project proposal" required autoFocus /></label><label>Notes<textarea name="notes" defaultValue={task?.notes} placeholder="A useful first step, context, or definition of done" rows={3} /></label><div className="form-grid"><label>Deadline<input type="datetime-local" name="deadline" defaultValue={task?.deadline ?? dateAt(0, 17)} required /></label><label>Focus target<select name="targetMinutes" defaultValue={task?.targetMinutes ?? 60}><option value="0">Deadline only</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60">1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option><option value="180">3 hours</option><option value="240">4 hours</option></select></label><label>Importance<select name="importance" defaultValue={task?.importance ?? "Medium"}><option>Low</option><option>Medium</option><option>High</option></select></label><label>Remind me<select name="reminderMinutes" defaultValue={task?.reminderMinutes ?? 30}><option value="10">Every 10 minutes</option><option value="30">Every 30 minutes</option><option value="60">Every hour</option><option value="120">Every 2 hours</option></select></label></div><div className="modal-actions">{onDelete && <button type="button" className="delete-button" onClick={onDelete}>Delete</button>}<span /><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit">{task ? "Save changes" : "Add task"}</button></div></form>
   </section></div>;
 }
 

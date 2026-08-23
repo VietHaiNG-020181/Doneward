@@ -8,6 +8,7 @@ const previous = current.replace("20260918T235900", "20260920T235900");
 test("parses and classifies supported Brightspace-style events", () => {
   const events = parseBrightspaceCalendar(current);
   assert.equal(events.length, 2); assert.equal(events[0].type, "assignment"); assert.equal(events[1].type, "quiz"); assert.equal(events[0].timezone, "America/Edmonton");
+  assert.equal(events[0].course, "CPSC 217");
   const analysis = analyzeFeed(events); assert.equal(analysis.uidCoverage, 100); assert.equal(analysis.parseableDeadlineCoverage, 100); assert.equal(analysis.duplicateUidCount, 0);
 });
 test("detects deadline changes using stable UIDs", () => {

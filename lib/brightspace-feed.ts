@@ -3,7 +3,7 @@ export type AssessmentType = "assignment" | "quiz" | "test" | "unknown";
 export type CalendarEvent = {
   uid: string | null; summary: string; description: string; categories: string;
   deadlineRaw: string | null; deadlineIso: string | null; timezone: string | null;
-  courseSignal: boolean; type: AssessmentType; confidence: "high" | "none"; propertyNames: string[];
+  courseSignal: boolean; course: string | null; type: AssessmentType; confidence: "high" | "none"; propertyNames: string[];
 };
 export type FeedAnalysis = {
   eventCount: number; uidCoverage: number; duplicateUidCount: number; deadlineCoverage: number;
@@ -51,9 +51,12 @@ export function parseBrightspaceCalendar(text: string): CalendarEvent[] {
       const first = (name: string) => properties?.find((property) => property.name === name);
       const summary = first("SUMMARY")?.value ?? "Untitled event"; const description = first("DESCRIPTION")?.value ?? ""; const categories = first("CATEGORIES")?.value ?? "";
       const deadline = first("DTSTART") ?? first("DUE") ?? null; const searchable = `${summary} ${categories} ${description}`; const classification = classifyAssessment(searchable);
+      const courseProperty = properties.find((property) => /COURSE|LOCATION/.test(property.name));
+      const courseMatch = searchable.match(/\b([A-Z]{2,5})\s*[- ]?(\d{3}[A-Z]?)\b/);
       events.push({ uid: first("UID")?.value || null, summary, description, categories, deadlineRaw: deadline?.value ?? null,
         deadlineIso: parseIcsDate(deadline?.value ?? null), timezone: deadline?.params.TZID ?? (deadline?.value.endsWith("Z") ? "UTC" : null),
         courseSignal: properties.some((property) => /COURSE|ORGANI[ZS]ER|LOCATION/.test(property.name)) || /\b(course|class)\b/i.test(searchable),
+        course: courseMatch ? `${courseMatch[1]} ${courseMatch[2]}` : courseProperty?.value || null,
         type: classification.type, confidence: classification.confidence, propertyNames: [...new Set(properties.map((property) => property.name))].sort() });
       properties = null; continue;
     }
