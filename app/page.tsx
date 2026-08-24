@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { loadInbox, loadTasks, saveTasks, type Importance, type Task } from "@/lib/doneward-store";
+import { loadTasks, saveTasks, type Importance, type Task } from "@/lib/doneward-store";
 
 type View = "today" | "all" | "upcoming" | "history";
 
@@ -32,7 +32,7 @@ function urgency(task: Task) {
   if (task.completed) return -Infinity;
   const minutesLeft = (new Date(task.deadline).getTime() - Date.now()) / 60000;
   const workLeft = Math.max(0, task.targetMinutes - task.focusedSeconds / 60);
-  const importance = { Low: 0, Medium: 18, High: 36 }[task.importance];
+  const importance = { Unprioritized: -10, Low: 0, Medium: 18, High: 36 }[task.importance];
   if (minutesLeft <= 0) return 10000 + importance + workLeft;
   const pressure = workLeft / Math.max(minutesLeft, 1);
   const proximity = 2400 / Math.max(minutesLeft, 30);
@@ -73,12 +73,10 @@ export default function Home() {
   const [showReminderPrompt, setShowReminderPrompt] = useState(true);
   const [dayLabel, setDayLabel] = useState("TODAY");
   const [welcome, setWelcome] = useState("Welcome back.");
-  const [inboxCount, setInboxCount] = useState(0);
   const tickRef = useRef<number | null>(null);
 
   useEffect(() => {
     loadTasks().then((saved) => setTasks(saved?.length ? saved : starterTasks())).finally(() => setReady(true));
-    loadInbox().then((items) => setInboxCount(items?.length ?? 0));
     if ("Notification" in window) setNotificationPermission(Notification.permission);
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     const now = new Date();
@@ -163,8 +161,7 @@ export default function Home() {
           <Nav active={view === "all"} onClick={() => setView("all")} symbol="○" label="All tasks" count={activeTasks.length} />
           <Nav active={view === "upcoming"} onClick={() => setView("upcoming")} symbol="□" label="Upcoming" />
           <Nav active={view === "history"} onClick={() => setView("history")} symbol="◷" label="Focus history" />
-          <a className="nav-item" href="/brightspace-inbox"><span>↳</span> New from Brightspace {inboxCount > 0 && <b>{inboxCount}</b>}</a>
-          <a className="nav-item" href="/feed-check"><span>↻</span> Feed check</a>
+          <a className="nav-item" href="/import-tasks"><span>↳</span> Import tasks</a>
         </nav>
         <div className="sidebar-bottom">
           <div className="streak-card"><span className="flame">♦</span><div><strong>{Math.min(7, completed.length + 3)} day streak</strong><small>Keep the momentum going</small></div></div>
@@ -227,7 +224,7 @@ function TaskCard({ task, urgent, onComplete, onFocus, onEdit }: { task: Task; u
 
 function TaskModal({ task, onClose, onSave, onDelete }: { task?: Task; onClose: () => void; onSave: (event: FormEvent<HTMLFormElement>) => void; onDelete?: () => void }) {
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="task-modal-title"><div className="modal-head"><div><span className="label dark">{task ? "EDIT TASK" : "NEW TASK"}</span><h2 id="task-modal-title">{task ? "Shape the next step" : "What needs your focus?"}</h2></div><button onClick={onClose} aria-label="Close">×</button></div>
-    <form onSubmit={onSave}><label>Task name<input name="title" defaultValue={task?.title} placeholder="e.g. Draft project proposal" required autoFocus /></label><label>Notes<textarea name="notes" defaultValue={task?.notes} placeholder="A useful first step, context, or definition of done" rows={3} /></label><div className="form-grid"><label>Deadline<input type="datetime-local" name="deadline" defaultValue={task?.deadline ?? dateAt(0, 17)} required /></label><label>Focus target<select name="targetMinutes" defaultValue={task?.targetMinutes ?? 60}><option value="0">Deadline only</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60">1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option><option value="180">3 hours</option><option value="240">4 hours</option></select></label><label>Importance<select name="importance" defaultValue={task?.importance ?? "Medium"}><option>Low</option><option>Medium</option><option>High</option></select></label><label>Remind me<select name="reminderMinutes" defaultValue={task?.reminderMinutes ?? 30}><option value="10">Every 10 minutes</option><option value="30">Every 30 minutes</option><option value="60">Every hour</option><option value="120">Every 2 hours</option></select></label></div><div className="modal-actions">{onDelete && <button type="button" className="delete-button" onClick={onDelete}>Delete</button>}<span /><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit">{task ? "Save changes" : "Add task"}</button></div></form>
+    <form onSubmit={onSave}><label>Task name<input name="title" defaultValue={task?.title} placeholder="e.g. Draft project proposal" required autoFocus /></label><label>Notes<textarea name="notes" defaultValue={task?.notes} placeholder="A useful first step, context, or definition of done" rows={3} /></label><div className="form-grid"><label>Deadline<input type="datetime-local" name="deadline" defaultValue={task?.deadline ?? dateAt(0, 17)} required /></label><label>Focus target<select name="targetMinutes" defaultValue={task?.targetMinutes ?? 60}><option value="0">Deadline only</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60">1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option><option value="180">3 hours</option><option value="240">4 hours</option></select></label><label>Importance<select name="importance" defaultValue={task?.importance ?? "Medium"}><option>Unprioritized</option><option>Low</option><option>Medium</option><option>High</option></select></label><label>Remind me<select name="reminderMinutes" defaultValue={task?.reminderMinutes ?? 30}><option value="10">Every 10 minutes</option><option value="30">Every 30 minutes</option><option value="60">Every hour</option><option value="120">Every 2 hours</option></select></label></div><div className="modal-actions">{onDelete && <button type="button" className="delete-button" onClick={onDelete}>Delete</button>}<span /><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit">{task ? "Save changes" : "Add task"}</button></div></form>
   </section></div>;
 }
 

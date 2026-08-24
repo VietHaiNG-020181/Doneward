@@ -9,9 +9,11 @@ async function render(pathname = "/") {
 test("server-renders Doneward", async () => {
   const response = await render(); assert.equal(response.status, 200); const html = await response.text(); assert.match(html, /Doneward/); assert.match(html, /Focus on what matters next/); assert.doesNotMatch(html, /codex-preview/);
 });
-test("server-renders the Brightspace feed checker", async () => {
-  const response = await render("/feed-check"); assert.equal(response.status, 200); const html = await response.text(); assert.match(html, /Brightspace/); assert.match(html, /never uploaded or saved/);
+test("server-renders the course-outline import review", async () => {
+  const response = await render("/import-tasks"); assert.equal(response.status, 200); const html = await response.text(); assert.match(html, /Import tasks/); assert.match(html, /Review-first MVP/); assert.match(html, /course outlines/i);
 });
-test("server-renders the user-reviewed Brightspace inbox", async () => {
-  const response = await render("/brightspace-inbox"); assert.equal(response.status, 200); const html = await response.text(); assert.match(html, /New schoolwork/); assert.match(html, /Nothing enters your plan until you review it/);
+test("legacy Brightspace routes redirect to task import", async () => {
+  for (const pathname of ["/feed-check", "/brightspace-inbox"]) {
+    const response = await render(pathname); assert.ok([307, 308].includes(response.status)); assert.equal(response.headers.get("location"), "/import-tasks");
+  }
 });
