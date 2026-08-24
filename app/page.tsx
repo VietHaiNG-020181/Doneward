@@ -186,8 +186,8 @@ export default function Home() {
         <div className="brand"><span className="brand-mark">D</span><span>Doneward</span></div>
         <nav aria-label="Main navigation">
           <Nav active={view === "today"} onClick={() => setView("today")} symbol="◈" label="Today" count={todayTasks.length} />
-          <Nav active={view === "all"} onClick={() => setView("all")} symbol="○" label="All tasks" count={activeTasks.length} />
-          <Nav active={view === "upcoming"} onClick={() => setView("upcoming")} symbol="□" label="Upcoming" />
+          <Nav active={view === "all"} onClick={() => setView("all")} symbol="○" label="Upcoming" count={activeTasks.length} />
+          <Nav active={view === "upcoming"} onClick={() => setView("upcoming")} symbol="□" label="Backlog" />
           <Nav active={view === "history"} onClick={() => setView("history")} symbol="◷" label="Focus history" />
           <a className="nav-item" href="/import-tasks"><span>↳</span> Import tasks</a>
         </nav>
@@ -216,8 +216,8 @@ export default function Home() {
         </div>
 
         <section className="task-section">
-          <div className="section-heading"><h2>{view === "today" ? "Today" : view === "all" ? "All tasks" : view === "upcoming" ? "Coming up" : "Completed"}</h2><span>{visibleTasks.length} {visibleTasks.length === 1 ? "task" : "tasks"}</span></div>
-          {!ready ? <div className="empty-state">Loading your plan…</div> : visibleTasks.length === 0 ? <div className="empty-state"><strong>{view === "today" ? "Your Today list is clear." : "Nothing here yet."}</strong><span>{view === "today" ? "Choose the tasks you want to work on from All tasks." : "Your next clear step can start small."}</span><button onClick={() => view === "today" ? setView("all") : setEditing("new")}>{view === "today" ? "Choose today’s tasks" : "Add a task"}</button></div> : view === "today" || view === "all" ? <TaskGroups tasks={visibleTasks} currentDay={currentDay} onComplete={toggleComplete} onFocus={openFocus} onEdit={setEditing} onToggleToday={toggleToday} /> : visibleTasks.map((task, index) => <TaskCard key={task.id} task={task} urgent={index === 0 && !task.completed} onComplete={() => toggleComplete(task)} onFocus={() => openFocus(task.id)} onEdit={() => setEditing(task)} />)}
+          <div className="section-heading"><h2>{view === "today" ? "Today" : view === "all" ? "Upcoming" : view === "upcoming" ? "Backlog" : "Completed"}</h2><span>{visibleTasks.length} {visibleTasks.length === 1 ? "task" : "tasks"}</span></div>
+          {!ready ? <div className="empty-state">Loading your plan…</div> : visibleTasks.length === 0 ? <div className="empty-state"><strong>{view === "today" ? "Your Today list is clear." : "Nothing here yet."}</strong><span>{view === "today" ? "Choose the tasks you want to work on from Upcoming." : "Your next clear step can start small."}</span><button onClick={() => view === "today" ? setView("all") : setEditing("new")}>{view === "today" ? "Choose today’s tasks" : "Add a task"}</button></div> : view === "today" || view === "all" ? <TaskGroups tasks={visibleTasks} currentDay={currentDay} onComplete={toggleComplete} onFocus={openFocus} onEdit={setEditing} onToggleToday={toggleToday} /> : visibleTasks.map((task, index) => <TaskCard key={task.id} task={task} urgent={index === 0 && !task.completed} onComplete={() => toggleComplete(task)} onFocus={() => openFocus(task.id)} onEdit={() => setEditing(task)} />)}
         </section>
       </section>
 
