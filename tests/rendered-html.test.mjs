@@ -10,7 +10,7 @@ test("server-renders Doneward", async () => {
   const response = await render(); assert.equal(response.status, 200); const html = await response.text(); assert.match(html, /Doneward/); assert.match(html, /Focus on what matters next/); assert.doesNotMatch(html, /codex-preview/);
 });
 test("server-renders the course-outline import review", async () => {
-  const response = await render("/import-tasks"); assert.equal(response.status, 200); const html = await response.text(); assert.match(html, /Import tasks/); assert.match(html, /Review-first MVP/); assert.match(html, /course outlines/i);
+  const response = await render("/import-tasks"); assert.equal(response.status, 200); const html = await response.text(); assert.match(html, /Import tasks/); assert.match(html, /Local extraction/); assert.match(html, /course outlines/i);
 });
 test("legacy Brightspace routes redirect to task import", async () => {
   for (const pathname of ["/feed-check", "/brightspace-inbox"]) {

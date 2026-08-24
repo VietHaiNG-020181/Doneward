@@ -18,6 +18,10 @@ function dateAt(days: number, hour: number, minute = 0) {
   return localInputDate(date);
 }
 
+function deadlineDate(value: string | number) {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T23:59:59`) : new Date(value);
+}
+
 function starterTasks(): Task[] {
   const now = Date.now();
   return [
@@ -30,7 +34,7 @@ function starterTasks(): Task[] {
 
 function urgency(task: Task) {
   if (task.completed) return -Infinity;
-  const minutesLeft = (new Date(task.deadline).getTime() - Date.now()) / 60000;
+  const minutesLeft = (deadlineDate(task.deadline).getTime() - Date.now()) / 60000;
   const workLeft = Math.max(0, task.targetMinutes - task.focusedSeconds / 60);
   const importance = { Unprioritized: -10, Low: 0, Medium: 18, High: 36 }[task.importance];
   if (minutesLeft <= 0) return 10000 + importance + workLeft;
@@ -40,7 +44,7 @@ function urgency(task: Task) {
 }
 
 function isToday(value: string | number) {
-  const date = new Date(value);
+  const date = deadlineDate(value);
   const today = new Date();
   return date.toDateString() === today.toDateString();
 }
@@ -53,7 +57,14 @@ function formatDuration(minutes: number) {
 }
 
 function deadlineLabel(value: string) {
-  const date = new Date(value);
+  const date = deadlineDate(value);
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+  if (dateOnly) {
+    const label = date.toLocaleDateString([], { month: "short", day: "numeric" });
+    if (date.getTime() < Date.now()) return `Overdue · ${label}`;
+    if (isToday(value)) return "Due today";
+    return `Due ${label}`;
+  }
   const time = date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   if (date.getTime() < Date.now()) return `Overdue · ${time}`;
   if (isToday(value)) return `Due ${time}`;
@@ -117,8 +128,8 @@ export default function Home() {
   const activeTasks = useMemo(() => tasks.filter((task) => !task.completed).sort((a, b) => urgency(b) - urgency(a)), [tasks]);
   const completed = tasks.filter((task) => task.completed);
   const nextTask = activeTasks[0];
-  const todayTasks = activeTasks.filter((task) => isToday(task.deadline) || new Date(task.deadline).getTime() < Date.now());
-  const upcomingTasks = activeTasks.filter((task) => !isToday(task.deadline) && new Date(task.deadline).getTime() >= Date.now());
+  const todayTasks = activeTasks.filter((task) => isToday(task.deadline) || deadlineDate(task.deadline).getTime() < Date.now());
+  const upcomingTasks = activeTasks.filter((task) => !isToday(task.deadline) && deadlineDate(task.deadline).getTime() >= Date.now());
   const visibleTasks = view === "today" ? todayTasks : view === "upcoming" ? upcomingTasks : view === "history" ? completed : activeTasks;
   const focusTask = tasks.find((task) => task.id === focusId);
   const remainingToday = todayTasks.reduce((sum, task) => sum + Math.max(0, task.targetMinutes - task.focusedSeconds / 60), 0);
@@ -213,7 +224,7 @@ function Progress({ task }: { task: Task }) {
 function TaskCard({ task, urgent, onComplete, onFocus, onEdit }: { task: Task; urgent?: boolean; onComplete: () => void; onFocus: () => void; onEdit: () => void }) {
   const remaining = task.targetMinutes - task.focusedSeconds / 60;
   const progress = Math.min(100, Math.round(task.focusedSeconds / 60 / Math.max(1, task.targetMinutes) * 100));
-  const overdue = new Date(task.deadline).getTime() < Date.now() && !task.completed;
+  const overdue = deadlineDate(task.deadline).getTime() < Date.now() && !task.completed;
   return <article className={`task-card ${urgent ? "urgent" : ""} ${task.completed ? "done" : ""}`}>
     <button className="check" onClick={onComplete} aria-label={`${task.completed ? "Reopen" : "Complete"} ${task.title}`}>{task.completed ? "✓" : ""}</button>
     <div className="task-main" onDoubleClick={onEdit}><h3>{task.title}</h3>{task.course && <span className="course-line">{task.course} · {task.assessmentType}</span>}<p>{task.completed ? (task.targetMinutes ? `${formatDuration(task.focusedSeconds / 60)} focused` : "Completed") : task.targetMinutes ? `${formatDuration(remaining)} remaining of ${formatDuration(task.targetMinutes)}` : "Deadline only"}</p>{!task.completed && task.targetMinutes > 0 && <div className="bar"><span style={{ width: `${progress}%` }} /></div>}</div>
@@ -224,7 +235,7 @@ function TaskCard({ task, urgent, onComplete, onFocus, onEdit }: { task: Task; u
 
 function TaskModal({ task, onClose, onSave, onDelete }: { task?: Task; onClose: () => void; onSave: (event: FormEvent<HTMLFormElement>) => void; onDelete?: () => void }) {
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="task-modal-title"><div className="modal-head"><div><span className="label dark">{task ? "EDIT TASK" : "NEW TASK"}</span><h2 id="task-modal-title">{task ? "Shape the next step" : "What needs your focus?"}</h2></div><button onClick={onClose} aria-label="Close">×</button></div>
-    <form onSubmit={onSave}><label>Task name<input name="title" defaultValue={task?.title} placeholder="e.g. Draft project proposal" required autoFocus /></label><label>Notes<textarea name="notes" defaultValue={task?.notes} placeholder="A useful first step, context, or definition of done" rows={3} /></label><div className="form-grid"><label>Deadline<input type="datetime-local" name="deadline" defaultValue={task?.deadline ?? dateAt(0, 17)} required /></label><label>Focus target<select name="targetMinutes" defaultValue={task?.targetMinutes ?? 60}><option value="0">Deadline only</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60">1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option><option value="180">3 hours</option><option value="240">4 hours</option></select></label><label>Importance<select name="importance" defaultValue={task?.importance ?? "Medium"}><option>Unprioritized</option><option>Low</option><option>Medium</option><option>High</option></select></label><label>Remind me<select name="reminderMinutes" defaultValue={task?.reminderMinutes ?? 30}><option value="10">Every 10 minutes</option><option value="30">Every 30 minutes</option><option value="60">Every hour</option><option value="120">Every 2 hours</option></select></label></div><div className="modal-actions">{onDelete && <button type="button" className="delete-button" onClick={onDelete}>Delete</button>}<span /><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit">{task ? "Save changes" : "Add task"}</button></div></form>
+    <form onSubmit={onSave}><label>Task name<input name="title" defaultValue={task?.title} placeholder="e.g. Draft project proposal" required autoFocus /></label><label>Notes<textarea name="notes" defaultValue={task?.notes} placeholder="A useful first step, context, or definition of done" rows={3} /></label><div className="form-grid"><label>Deadline<input type={task?.deadline && /^\d{4}-\d{2}-\d{2}$/.test(task.deadline) ? "date" : "datetime-local"} name="deadline" defaultValue={task?.deadline ?? dateAt(0, 17)} required /></label><label>Focus target<select name="targetMinutes" defaultValue={task?.targetMinutes ?? 60}><option value="0">Deadline only</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60">1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option><option value="180">3 hours</option><option value="240">4 hours</option></select></label><label>Importance<select name="importance" defaultValue={task?.importance ?? "Medium"}><option>Unprioritized</option><option>Low</option><option>Medium</option><option>High</option></select></label><label>Remind me<select name="reminderMinutes" defaultValue={task?.reminderMinutes ?? 30}><option value="10">Every 10 minutes</option><option value="30">Every 30 minutes</option><option value="60">Every hour</option><option value="120">Every 2 hours</option></select></label></div><div className="modal-actions">{onDelete && <button type="button" className="delete-button" onClick={onDelete}>Delete</button>}<span /><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit">{task ? "Save changes" : "Add task"}</button></div></form>
   </section></div>;
 }
 

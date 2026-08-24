@@ -1,5 +1,6 @@
 export type AssessmentType = "assignment" | "quiz" | "test" | "other";
 export type Importance = "Unprioritized" | "Low" | "Medium" | "High";
+export type ExtractionConfidence = "ready-to-confirm" | "needs-date-review" | "needs-type-review" | "possible-duplicate" | "could-not-extract";
 export type Task = {
   id: string; title: string; notes: string; deadline: string; targetMinutes: number; focusedSeconds: number;
   importance: Importance; reminderMinutes: number; nextReminderAt: number; completed: boolean; completedAt?: number; createdAt: number;
@@ -7,11 +8,12 @@ export type Task = {
 };
 export type DraftAssessment = {
   id: string; title: string; assessmentType: AssessmentType; deadline: string; weight: string; sourcePage: string;
-  confidence: "high" | "medium" | "needs-review";
+  confidence: ExtractionConfidence; sourceEvidence: string;
 };
 export type DraftCourse = {
   id: string; fileName: string; fileSize: number; courseCode: string; courseName: string; semester: string;
-  assessments: DraftAssessment[]; uploadedAt: number;
+  assessments: DraftAssessment[]; uploadedAt: number; parseStatus?: "manual" | "extracting" | "extracted" | "needs-ocr" | "failed";
+  pageCount?: number; lowTextPages?: number[];
 };
 
 const DB_NAME = "doneward-db";
