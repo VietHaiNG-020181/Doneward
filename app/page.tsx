@@ -49,6 +49,17 @@ function isToday(value: string | number) {
   return date.toDateString() === today.toDateString();
 }
 
+function todayKey() {
+  return localInputDate(new Date()).slice(0, 10);
+}
+
+function courseGroup(task: Task) {
+  const course = task.course?.trim();
+  if (!course) return "Personal";
+  const code = course.match(/\b([a-z]{2,5})(?:\s*[- ]?\s*)\d{3,4}\b/i);
+  return code ? code[1].toUpperCase() : course;
+}
+
 function formatDuration(minutes: number) {
   const rounded = Math.max(0, Math.ceil(minutes));
   const hours = Math.floor(rounded / 60);
@@ -127,8 +138,9 @@ export default function Home() {
 
   const activeTasks = useMemo(() => tasks.filter((task) => !task.completed).sort((a, b) => urgency(b) - urgency(a)), [tasks]);
   const completed = tasks.filter((task) => task.completed);
-  const nextTask = activeTasks[0];
-  const todayTasks = activeTasks.filter((task) => isToday(task.deadline) || deadlineDate(task.deadline).getTime() < Date.now());
+  const currentDay = todayKey();
+  const todayTasks = activeTasks.filter((task) => task.plannedDate === currentDay);
+  const nextTask = view === "today" ? todayTasks[0] : activeTasks[0];
   const upcomingTasks = activeTasks.filter((task) => !isToday(task.deadline) && deadlineDate(task.deadline).getTime() >= Date.now());
   const visibleTasks = view === "today" ? todayTasks : view === "upcoming" ? upcomingTasks : view === "history" ? completed : activeTasks;
   const focusTask = tasks.find((task) => task.id === focusId);
@@ -145,6 +157,7 @@ export default function Home() {
       importance: form.get("importance") as Importance, reminderMinutes, nextReminderAt: Date.now() + reminderMinutes * 60000,
       completed: existing?.completed ?? false, completedAt: existing?.completedAt, createdAt: existing?.createdAt ?? Date.now(),
       source: existing?.source ?? "manual", sourceUid: existing?.sourceUid, course: existing?.course, assessmentType: existing?.assessmentType, originalDeadline: existing?.originalDeadline,
+      plannedDate: existing?.plannedDate ?? (view === "today" ? currentDay : undefined),
     };
     setTasks((current) => existing ? current.map((item) => item.id === task.id ? task : item) : [...current, task]);
     setEditing(null);
@@ -153,6 +166,10 @@ export default function Home() {
   function toggleComplete(task: Task) {
     setTasks((current) => current.map((item) => item.id === task.id ? { ...item, completed: !item.completed, completedAt: !item.completed ? Date.now() : undefined } : item));
     if (focusId === task.id) { setRunning(false); setFocusId(null); }
+  }
+
+  function toggleToday(task: Task) {
+    setTasks((current) => current.map((item) => item.id === task.id ? { ...item, plannedDate: item.plannedDate === currentDay ? undefined : currentDay } : item));
   }
 
   async function enableNotifications() {
@@ -200,9 +217,8 @@ export default function Home() {
 
         <section className="task-section">
           <div className="section-heading"><h2>{view === "today" ? "Today" : view === "all" ? "All tasks" : view === "upcoming" ? "Coming up" : "Completed"}</h2><span>{visibleTasks.length} {visibleTasks.length === 1 ? "task" : "tasks"}</span></div>
-          {!ready ? <div className="empty-state">Loading your plan…</div> : visibleTasks.length === 0 ? <div className="empty-state"><strong>Nothing here yet.</strong><span>Your next clear step can start small.</span><button onClick={() => setEditing("new")}>Add a task</button></div> : visibleTasks.map((task, index) => <TaskCard key={task.id} task={task} urgent={index === 0 && !task.completed} onComplete={() => toggleComplete(task)} onFocus={() => openFocus(task.id)} onEdit={() => setEditing(task)} />)}
+          {!ready ? <div className="empty-state">Loading your plan…</div> : visibleTasks.length === 0 ? <div className="empty-state"><strong>{view === "today" ? "Your Today list is clear." : "Nothing here yet."}</strong><span>{view === "today" ? "Choose the tasks you want to work on from All tasks." : "Your next clear step can start small."}</span><button onClick={() => view === "today" ? setView("all") : setEditing("new")}>{view === "today" ? "Choose today’s tasks" : "Add a task"}</button></div> : view === "today" || view === "all" ? <TaskGroups tasks={visibleTasks} currentDay={currentDay} onComplete={toggleComplete} onFocus={openFocus} onEdit={setEditing} onToggleToday={toggleToday} /> : visibleTasks.map((task, index) => <TaskCard key={task.id} task={task} urgent={index === 0 && !task.completed} onComplete={() => toggleComplete(task)} onFocus={() => openFocus(task.id)} onEdit={() => setEditing(task)} />)}
         </section>
-        {view === "today" && upcomingTasks.length > 0 && <section className="task-section upcoming"><div className="section-heading"><h2>Coming up</h2><button className="text-button" onClick={() => setView("upcoming")}>See all</button></div>{upcomingTasks.slice(0, 2).map((task) => <TaskCard key={task.id} task={task} onComplete={() => toggleComplete(task)} onFocus={() => openFocus(task.id)} onEdit={() => setEditing(task)} />)}</section>}
       </section>
 
       {editing && <TaskModal task={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} onSave={saveTask} onDelete={editing === "new" ? undefined : () => { setTasks((current) => current.filter((task) => task.id !== editing.id)); setEditing(null); }} />}
@@ -216,12 +232,19 @@ function Nav({ active, onClick, symbol, label, count }: { active: boolean; onCli
   return <button className={`nav-item ${active ? "active" : ""}`} onClick={onClick}><span>{symbol}</span>{label}{count !== undefined && <b>{count}</b>}</button>;
 }
 
+function TaskGroups({ tasks, currentDay, onComplete, onFocus, onEdit, onToggleToday }: { tasks: Task[]; currentDay: string; onComplete: (task: Task) => void; onFocus: (id: string) => void; onEdit: (task: Task) => void; onToggleToday: (task: Task) => void }) {
+  const groups = new Map<string, Task[]>();
+  tasks.forEach((task) => { const group = courseGroup(task); groups.set(group, [...(groups.get(group) ?? []), task]); });
+  const entries = [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
+  return <div className="course-groups">{entries.map(([group, items]) => <section className="course-group" key={group}><div className="course-group-head"><h3>{group}</h3><span>{items.length} {items.length === 1 ? "task" : "tasks"}</span></div>{items.map((task) => <TaskCard key={task.id} task={task} urgent={task.id === tasks[0]?.id && !task.completed} plannedToday={task.plannedDate === currentDay} showTodayAction onComplete={() => onComplete(task)} onFocus={() => onFocus(task.id)} onEdit={() => onEdit(task)} onToggleToday={() => onToggleToday(task)} />)}</section>)}</div>;
+}
+
 function Progress({ task }: { task: Task }) {
   const progress = Math.min(100, Math.round(task.focusedSeconds / 60 / Math.max(1, task.targetMinutes) * 100));
   return <div className="progress-ring" style={{ "--progress": `${progress}%` } as React.CSSProperties} aria-label={`${progress} percent complete`}><span>{progress}%</span></div>;
 }
 
-function TaskCard({ task, urgent, onComplete, onFocus, onEdit }: { task: Task; urgent?: boolean; onComplete: () => void; onFocus: () => void; onEdit: () => void }) {
+function TaskCard({ task, urgent, plannedToday, showTodayAction, onComplete, onFocus, onEdit, onToggleToday }: { task: Task; urgent?: boolean; plannedToday?: boolean; showTodayAction?: boolean; onComplete: () => void; onFocus: () => void; onEdit: () => void; onToggleToday?: () => void }) {
   const remaining = task.targetMinutes - task.focusedSeconds / 60;
   const progress = Math.min(100, Math.round(task.focusedSeconds / 60 / Math.max(1, task.targetMinutes) * 100));
   const overdue = deadlineDate(task.deadline).getTime() < Date.now() && !task.completed;
@@ -229,6 +252,7 @@ function TaskCard({ task, urgent, onComplete, onFocus, onEdit }: { task: Task; u
     <button className="check" onClick={onComplete} aria-label={`${task.completed ? "Reopen" : "Complete"} ${task.title}`}>{task.completed ? "✓" : ""}</button>
     <div className="task-main" onDoubleClick={onEdit}><h3>{task.title}</h3>{task.course && <span className="course-line">{task.course} · {task.assessmentType}</span>}<p>{task.completed ? (task.targetMinutes ? `${formatDuration(task.focusedSeconds / 60)} focused` : "Completed") : task.targetMinutes ? `${formatDuration(remaining)} remaining of ${formatDuration(task.targetMinutes)}` : "Deadline only"}</p>{!task.completed && task.targetMinutes > 0 && <div className="bar"><span style={{ width: `${progress}%` }} /></div>}</div>
     <div className="task-meta"><span className={`tag ${overdue || urgent ? "coral" : !isToday(task.deadline) ? "blue" : ""}`}>{deadlineLabel(task.deadline)}</span><span>{task.importance}</span></div>
+    {showTodayAction && !task.completed && <button className={`today-toggle ${plannedToday ? "selected" : ""}`} onClick={onToggleToday} aria-label={`${plannedToday ? "Remove" : "Add"} ${task.title} ${plannedToday ? "from" : "to"} Today`}>{plannedToday ? "✓ Today" : "+ Today"}</button>}
     {!task.completed && task.targetMinutes > 0 && <button className="mini-focus" onClick={onFocus} aria-label={`Focus on ${task.title}`}>▶</button>}<button className="more" onClick={onEdit} aria-label={`Edit ${task.title}`}>···</button>
   </article>;
 }

@@ -4,6 +4,7 @@ export type Task = {
   id: string; title: string; notes: string; deadline: string; targetMinutes: number; focusedSeconds: number;
   importance: Importance; reminderMinutes: number; nextReminderAt: number; completed: boolean; completedAt?: number; createdAt: number;
   source?: "manual" | "outline" | "brightspace"; sourceUid?: string; course?: string | null; assessmentType?: AssessmentType; originalDeadline?: string;
+  plannedDate?: string;
 };
 export type DraftAssessment = {
   id: string; taskName: string; category: AssessmentType; deadline: string;
