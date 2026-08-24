@@ -47,3 +47,13 @@ export function normalizeGptExtraction(value: unknown): GptOutlineExtraction | n
   }
   return { courseName: candidate.courseName.trim(), tasks: tasks.filter((task) => task.taskName) };
 }
+
+export function parseOutlineJson(text: string): GptOutlineExtraction | null {
+  const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  if (!cleaned) return null;
+  try {
+    return normalizeGptExtraction(JSON.parse(cleaned));
+  } catch {
+    return null;
+  }
+}

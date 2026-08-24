@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ASSESSMENT_CATEGORIES, formatFileSize, isPdf, MAX_OUTLINE_BYTES, normalizeGptExtraction, targetMinutesFor } from "../lib/outline-import.ts";
+import { ASSESSMENT_CATEGORIES, formatFileSize, isPdf, MAX_OUTLINE_BYTES, normalizeGptExtraction, parseOutlineJson, targetMinutesFor } from "../lib/outline-import.ts";
 
 test("validates PDF files without accepting unrelated uploads", () => {
   assert.equal(isPdf({ name: "outline.pdf", type: "" }), true);
@@ -39,4 +39,11 @@ test("rejects malformed results and never accepts a made-up deadline format", ()
     courseName: "Course",
     tasks: [{ taskName: "Quiz", category: "quiz", deadline: null }],
   });
+});
+
+test("parses plain and fenced ChatGPT JSON", () => {
+  const value = { courseName: "Algorithms", tasks: [{ taskName: "Quiz 1", category: "quiz", deadline: "2026-09-10" }] };
+  assert.deepEqual(parseOutlineJson(JSON.stringify(value)), value);
+  assert.deepEqual(parseOutlineJson(`\`\`\`json\n${JSON.stringify(value)}\n\`\`\``), value);
+  assert.equal(parseOutlineJson("not json"), null);
 });
