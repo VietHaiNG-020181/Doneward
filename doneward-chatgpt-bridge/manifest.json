@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Doneward ChatGPT Bridge",
+  "version": "0.1.0",
+  "description": "Personal bridge that sends a Doneward course outline through your signed-in ChatGPT tab and returns structured tasks.",
+  "permissions": ["storage", "tabs", "unlimitedStorage"],
+  "host_permissions": [
+    "https://doneward-focus.hyperwarev.chatgpt.site/*",
+    "http://localhost/*",
+    "https://chatgpt.com/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://doneward-focus.hyperwarev.chatgpt.site/*", "http://localhost/*"],
+      "js": ["site-bridge.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://chatgpt.com/*"],
+      "js": ["chatgpt-bridge.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": { "default_title": "Doneward ChatGPT Bridge" }
+}
