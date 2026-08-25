@@ -1,8 +1,33 @@
+/* global chrome */
+
 const JOB_PREFIX = "doneward-job:";
+const JOB_TTL_MS = 24 * 60 * 60 * 1000;
+const DONEWARD_ORIGIN = "https://doneward-focus.hyperwarev.chatgpt.site";
+
+function senderOrigin(sender) {
+  try { return sender?.tab?.url ? new URL(sender.tab.url).origin : null; }
+  catch { return null; }
+}
+
+function isDonewardSender(sender) {
+  if (sender?.id !== chrome.runtime.id || !sender?.tab?.url) return false;
+  try {
+    const url = new URL(sender.tab.url);
+    return url.origin === DONEWARD_ORIGIN || (url.protocol === "http:" && url.hostname === "localhost");
+  } catch { return false; }
+}
+
+function isChatGPTSender(sender) {
+  return sender?.id === chrome.runtime.id && senderOrigin(sender) === "https://chatgpt.com";
+}
 
 async function allJobs() {
   const values = await chrome.storage.local.get(null);
-  return Object.entries(values).filter(([key]) => key.startsWith(JOB_PREFIX)).map(([key, value]) => ({ key, ...value }));
+  const now = Date.now();
+  const jobs = Object.entries(values).filter(([key]) => key.startsWith(JOB_PREFIX)).map(([key, value]) => ({ key, ...value }));
+  const staleKeys = jobs.filter((job) => now - (job.updatedAt || job.createdAt || 0) > JOB_TTL_MS).map((job) => job.key);
+  if (staleKeys.length) await chrome.storage.local.remove(staleKeys);
+  return jobs.filter((job) => !staleKeys.includes(job.key));
 }
 
 async function getJob(jobId) {
@@ -37,10 +62,12 @@ async function startImport(jobId, originTabId) {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     if (message?.type === "START_IMPORT") {
+      if (!isDonewardSender(sender)) { sendResponse({ ok: false }); return; }
       sendResponse(await startImport(message.jobId, sender.tab?.id));
       return;
     }
     if (message?.type === "CHATGPT_READY") {
+      if (!isChatGPTSender(sender)) { sendResponse({ ok: false }); return; }
       const job = (await allJobs()).find((item) => item.chatgptTabId === sender.tab?.id && ["opening", "working"].includes(item.status));
       if (!job) { sendResponse({ ok: false }); return; }
       await patchJob(job.jobId, { status: "working", statusMessage: "Uploading the PDF to ChatGPT…" });
@@ -48,14 +75,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return;
     }
     if (message?.type === "CHATGPT_PROGRESS") {
+      if (!isChatGPTSender(sender)) { sendResponse({ ok: false }); return; }
+      const current = await getJob(message.jobId);
+      if (!current || current.chatgptTabId !== sender.tab?.id) { sendResponse({ ok: false }); return; }
       const job = await patchJob(message.jobId, { status: "working", statusMessage: message.message });
       await notifySite(job, "IMPORT_PROGRESS", { jobId: message.jobId, message: message.message });
       sendResponse({ ok: true });
       return;
     }
     if (message?.type === "CHATGPT_RESULT") {
+      if (!isChatGPTSender(sender)) { sendResponse({ ok: false }); return; }
       const current = await getJob(message.jobId);
-      if (!current) { sendResponse({ ok: false }); return; }
+      if (!current || current.chatgptTabId !== sender.tab?.id) { sendResponse({ ok: false }); return; }
       const compact = { ...current, fileBase64: undefined, prompt: undefined, status: "complete", result: message.result, statusMessage: "Task list ready" };
       await chrome.storage.local.set({ [`${JOB_PREFIX}${message.jobId}`]: compact });
       await notifySite(compact, "IMPORT_RESULT", { jobId: message.jobId, result: message.result, fileName: compact.fileName, fileSize: compact.fileSize });
@@ -64,8 +95,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return;
     }
     if (message?.type === "CHATGPT_ERROR") {
+      if (!isChatGPTSender(sender)) { sendResponse({ ok: false }); return; }
       const current = await getJob(message.jobId);
-      if (!current) { sendResponse({ ok: false }); return; }
+      if (!current || current.chatgptTabId !== sender.tab?.id) { sendResponse({ ok: false }); return; }
       const compact = { ...current, fileBase64: undefined, prompt: undefined, status: "error", errorMessage: message.message, statusMessage: message.message };
       await chrome.storage.local.set({ [`${JOB_PREFIX}${message.jobId}`]: compact });
       await notifySite(compact, "IMPORT_ERROR", { jobId: message.jobId, message: message.message });
@@ -74,6 +106,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return;
     }
     if (message?.type === "SITE_READY") {
+      if (!isDonewardSender(sender)) { sendResponse({ ok: false }); return; }
       const jobs = (await allJobs()).sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt));
       const complete = jobs.find((job) => job.status === "complete");
       const failed = jobs.find((job) => job.status === "error");
@@ -86,6 +119,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return;
     }
     if (message?.type === "RESULT_DELIVERED") {
+      if (!isDonewardSender(sender)) { sendResponse({ ok: false }); return; }
       await chrome.storage.local.remove(`${JOB_PREFIX}${message.jobId}`);
       sendResponse({ ok: true });
       return;

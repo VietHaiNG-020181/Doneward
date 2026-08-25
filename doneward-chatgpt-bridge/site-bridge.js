@@ -1,3 +1,5 @@
+/* global chrome */
+
 const APP_SOURCE = "doneward-app";
 const BRIDGE_SOURCE = "doneward-chatgpt-bridge";
 const JOB_PREFIX = "doneward-job:";
@@ -32,7 +34,13 @@ window.addEventListener("message", async (event) => {
   if (event.data.type !== "DONEWARD_CHATGPT_START") return;
 
   const { jobId, fileName, fileSize, fileType, fileBase64, prompt } = event.data;
-  if (typeof jobId !== "string" || typeof fileName !== "string" || typeof fileBase64 !== "string" || typeof prompt !== "string") {
+  if (
+    typeof jobId !== "string" || !/^[0-9a-f-]{36}$/i.test(jobId) ||
+    typeof fileName !== "string" || !fileName.toLowerCase().endsWith(".pdf") || fileName.length > 255 ||
+    typeof fileSize !== "number" || !Number.isFinite(fileSize) || fileSize <= 0 || fileSize > 20 * 1024 * 1024 ||
+    typeof fileType !== "string" || (fileType !== "application/pdf" && fileType !== "") ||
+    typeof fileBase64 !== "string" || typeof prompt !== "string"
+  ) {
     sendToPage("DONEWARD_CHATGPT_ERROR", { jobId, message: "The extension received an invalid import request." });
     return;
   }

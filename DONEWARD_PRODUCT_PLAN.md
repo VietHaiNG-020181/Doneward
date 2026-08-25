@@ -1,137 +1,186 @@
 # Doneward Product Plan
 
-Status: Ready for MVP development planning  
+Status: Approved direction; ready for MVP development
 Owner and initial user: Project owner  
-Last updated: August 22, 2026
+Last updated: August 24, 2026
 
 ## 1. Product summary
 
-Doneward is a private academic planning and focus application for a University of Calgary student. It automatically discovers upcoming assignments, quizzes, and tests from Brightspace, places new items into a review inbox, and helps the user turn accepted work into a prioritized daily plan.
+Doneward is a private academic planning and focus application for a University of Calgary student. At the start of a semester, the user uploads the PDF course outline for each course. Doneward extracts the course's assignments, quizzes, tests, exams, and other graded assessments into a structured draft. The user verifies the draft before it becomes the semester plan.
+
+During the semester, Doneward helps the user choose work for Today, manually assign priority, receive deadline reminders, complete focused work with a timer, and recover unfinished work through Backlog.
+
+The core product loop is:
+
+> Upload course outlines → review extracted assessments → confirm semester plan → choose Today tasks → focus with a timer → finish, extend, or move to Backlog
+
+## 2. Problem statement
 
 The product addresses four related problems:
 
 1. Schoolwork is easily forgotten when several courses are active.
-2. Due dates may be entered incorrectly or changed by instructors.
-3. A deadline alone does not help the user decide what to work on today.
+2. Manually copying an entire semester of deadlines is slow and error-prone.
+3. A list of deadlines does not help the user decide what to work on today.
 4. Starting a task does not guarantee that enough focused time is spent on it.
 
-The core product loop is:
+The previous idea of continuously classifying Brightspace calendar events is removed from the MVP. Calendar-event formats vary too much between instructors and courses. Course outlines are a more stable, semester-level source and allow the user to verify all extracted information once before relying on it.
 
-> Sync Brightspace → review new work → assign priority and estimated time → build Today queue → focus with a timer → finish, extend, or move to Backlog
+## 3. MVP goals
 
-## 2. Product goals
-
-### MVP goals
-
-- Automatically populate an inbox from the user's Brightspace calendar feed.
-- Detect due-date changes and notify the user immediately.
-- Let the user review imported schoolwork before adding it to the active plan.
-- Let the user manually assign High, Medium, or Low priority.
-- Let the user estimate the focused work time required for each work task.
-- Make it easy to select a balanced set of tasks for Today.
+- Accept several course-outline PDF files at the start of a semester.
+- Extract each course's code, name, graded assessments, due dates/times, and optional grade weights.
+- Organize extracted assessments under their course and assessment category.
+- Show the source page and confidence state for every extracted item.
+- Require user review and confirmation before creating the semester plan.
+- Allow missing, ambiguous, or changed deadlines to be corrected manually.
+- Let the user assign High, Medium, or Low priority.
+- Let the user add personal notes and estimated focus time.
+- Let the user choose a balanced set of tasks for Today.
 - Provide a task-specific countdown timer with clear end-of-session choices.
 - Move unfinished or unstarted Today tasks into Backlog at the end of the day.
 - Synchronize the plan across signed-in devices.
-- Deliver push and email reminders.
+- Deliver push and email deadline reminders and a configurable daily summary.
+- Allow manual tasks in addition to outline-derived assessments.
 
-### Long-term goal
+## 4. Non-goals for the MVP
 
-Replace or supplement calendar-feed synchronization with an official Brightspace OAuth/API integration approved by the University of Calgary. The API integration should provide more reliable assessment types and assignment metadata while preserving the same inbox and planning workflow.
-
-### Non-goals for the MVP
-
-- AI-generated priorities or schedules
+- Connecting to or browsing the user's Brightspace account
+- Automatically locating course outlines inside Brightspace
+- Brightspace calendar-feed synchronization
+- Continuous detection of instructor deadline changes
+- Automatic submission detection
 - Automatic priority assignment
+- AI-generated daily schedules
 - Grade tracking or grade predictions
-- Course-content downloads
-- Automatic submission of schoolwork
-- Reading announcements or discussion posts
+- Course-content or lecture-note processing
 - Team or shared planning
 - Linking manual review tasks to imported tests
 - Native desktop or mobile applications
-- Official Brightspace API integration
+- Official Brightspace OAuth/API integration
 
-## 3. Target user
+## 5. Target user
 
-The MVP is designed for one user: the project owner, a University of Calgary student using Brightspace with a school Microsoft account and Microsoft Authenticator MFA.
+The MVP is designed for one user: the project owner, a University of Calgary student. The architecture may support more users later, but product decisions should optimize for this user's semester workflow.
 
-The architecture should not prevent broader use later, but MVP decisions should optimize for this user's workflow rather than for a general marketplace.
-
-## 4. Confirmed product decisions
+## 6. Confirmed product decisions
 
 | Area | Decision |
 |---|---|
 | Platform | Responsive web application/PWA |
 | Planner sign-in | Microsoft sign-in using the user's school account |
 | Storage | Cloud database with cross-device synchronization |
-| Brightspace MVP connection | Private Brightspace calendar-feed URL entered during onboarding |
-| Automatic sync | Server-side synchronization every 30 or 60 minutes, selected by the user |
-| Manual sync | A visible Sync now button |
-| Imported types | Assignments, quizzes, and tests only |
-| Import destination | Separate New from Brightspace inbox |
-| Editable planning fields | Priority, notes, and estimated work time |
+| Semester input | User uploads course-outline PDFs manually |
+| Import timing | Once at the beginning of each semester, with re-import available when needed |
+| Parsing output | Draft course plan requiring user confirmation |
+| Course organization | Each course is its own category |
+| Assessment organization | Assignments, Quizzes, Tests/Exams, and Other Assessments |
+| Source evidence | Every extracted item links to the outline page where it was found |
+| Uncertain extraction | Highlighted for correction; never silently accepted |
+| Deadline changes | User edits the deadline manually |
+| Editable planning fields | Priority, notes, deadline, and estimated work time |
 | Priority | Manual High, Medium, or Low |
 | Ordering | Priority group first, then nearest deadline within each group |
 | Daily planning | User selects tasks from the full prioritized list and adds them to Today |
-| Today display | Ordered list showing priority and deadline; no calendar time-blocking |
+| Today display | Ordered list showing course, priority, and deadline; no calendar time-blocking |
 | Work timer | One countdown using the task's estimated time |
 | Timer expiry | Sound plus Finished, Keep working, and Finish later choices |
 | Additional work | Keep working asks for an additional duration |
 | Unfinished work | Finish later moves the task to Backlog with a highlighted deadline |
 | End of day | Every unfinished or unstarted Today task moves to Backlog |
-| Tests/quizzes | Deadline-only items by default; preparation is a separate manual task |
-| Completion history | Completed section shows title and original deadline only |
+| Tests/quizzes | Deadline-only by default; preparation is a separate manual task |
+| Completion history | Completed section shows title and deadline only |
 | Reminder schedule | One week, three days, and one day before the deadline |
-| Urgent changes | New work due within three days and deadlines moved closer trigger immediate alerts |
+| Urgent additions/edits | Items entered or changed inside three days trigger an immediate alert |
 | Daily summary | Push/email summary at a user-selected time |
 | Notification channels | Push and email |
 | Backup | Manual data export and import |
 
-## 5. MVP user journeys
+## 7. Core user journeys
 
-### 5.1 First-time onboarding
+### 7.1 First-time onboarding
 
 1. User signs in with their University of Calgary Microsoft account.
-2. App explains what the Brightspace calendar feed is and how it will be used.
-3. User pastes their private Brightspace calendar-feed URL.
-4. App validates the feed without displaying or logging the secret URL.
-5. User selects a synchronization interval: 30 minutes or 60 minutes.
-6. User chooses a daily summary time and time zone.
-7. User enables push notifications and confirms the email used for reminders.
-8. Initial synchronization runs.
-9. Discovered assignments, quizzes, and tests enter the review inbox.
+2. User selects their time zone and preferred daily-summary time.
+3. User enables browser push notifications and confirms the email used for reminders.
+4. User creates a semester, such as Fall 2026, and enters its approximate start and end dates.
+5. App takes the user to Import course outlines.
 
-### 5.2 Reviewing imported work
+### 7.2 Importing course outlines
 
-1. User receives a notification that new schoolwork was found.
-2. User opens New from Brightspace.
-3. Each item shows title, course, detected type, and Brightspace deadline.
-4. User sets priority.
-5. For assignments, the user sets estimated work time; this is optional for quizzes and tests.
-6. User may add personal notes.
-7. User accepts the item into the active plan.
+1. User selects or drags in one or more PDF course outlines.
+2. App validates file type and size.
+3. App extracts normal PDF text and tables; scanned PDFs use OCR as a fallback.
+4. App identifies course information and assessment candidates.
+5. App creates one draft course per uploaded outline.
+6. App never creates active tasks directly from unreviewed extraction results.
 
-Items that cannot be confidently classified as assignments, quizzes, or tests are excluded from the MVP import flow. More advanced review and ignore rules are deferred.
+The parser should look for graded assessments, including assignments, quizzes, tests, midterms, exams, projects, labs, papers, presentations, and other named assessment components. Readings, lecture topics, office hours, policies, and ungraded activities should not become tasks.
 
-### 5.3 Creating a manual task
+### 7.3 Reviewing one course
+
+1. User opens a draft course.
+2. Header shows detected course code, course name, semester, and outline filename.
+3. Extracted items appear in categories:
+   - Assignments
+   - Quizzes
+   - Tests/Exams
+   - Other Assessments
+4. Each item shows title, deadline, optional weight, source page, and confidence state.
+5. Selecting the source evidence opens the relevant PDF page or excerpt.
+6. User corrects the title, type, deadline, or weight when necessary.
+7. Items with missing dates remain visible as Date not announced.
+8. User can remove non-actionable or incorrectly extracted items.
+9. User selects Confirm course.
+10. Confirmed assessments become the course's semester task list.
+
+### 7.4 Viewing the semester
+
+The main semester view is organized by course:
+
+```text
+CPSC 111
+  Assignments
+    - Assignment 1 — September 25
+    - Assignment 2 — October 30
+  Quizzes
+    - Quiz 1 — September 18
+  Tests/Exams
+    - Midterm — October 20
+    - Final — Date not announced
+```
+
+The user can also switch to All tasks, where confirmed tasks are grouped by High, Medium, and Low priority and sorted by deadline.
+
+### 7.5 Planning an extracted task
+
+1. Newly confirmed assessments begin with no priority and no estimate.
+2. User selects an assessment.
+3. User sets High, Medium, or Low priority.
+4. User adds optional notes.
+5. For an assignment or manual work task, user sets estimated focus time.
+6. For a quiz or test, estimated focus time may stay empty.
+7. User may edit the deadline if the instructor later changes it.
+
+### 7.6 Creating a manual task
 
 1. User selects Add task.
-2. User enters title, optional course, deadline, priority, notes, and estimated time.
-3. User saves the task.
-4. The task appears in the active list under its selected priority.
+2. User chooses a course or Personal/Uncategorized.
+3. User enters title, deadline, priority, notes, and estimated time.
+4. User saves the task.
+5. The task appears in the selected course and in the priority-based All tasks view.
 
-Manual tasks do not need to link to imported Brightspace items in the MVP.
+Manual review sessions do not need to link to imported tests in the MVP.
 
-### 5.4 Planning Today
+### 7.7 Planning Today
 
-1. User opens All tasks.
-2. Tasks appear in High, Medium, and Low groups.
-3. Each group is ordered by nearest deadline.
+1. User opens All tasks or a course.
+2. User sees High, Medium, and Low priority groups.
+3. Each priority group is ordered by nearest deadline.
 4. User selects any combination, such as two High, one Medium, and one Low task.
 5. Selected tasks appear in Today in the same priority/deadline ordering.
 6. The app does not assign start times or automatically choose the daily list.
 
-### 5.5 Completing focused work
+### 7.8 Completing focused work
 
 1. User starts an assignment or manual task from Today.
 2. Countdown begins from the estimated remaining work time.
@@ -147,36 +196,39 @@ Manual tasks do not need to link to imported Brightspace items in the MVP.
 
 Only one focus timer may be active for the user at a time.
 
-### 5.6 End-of-day rollover
+### 7.9 End-of-day rollover
 
 1. At the end of the user's local day, the server checks Today.
-2. Any task not completed moves to Backlog, regardless of whether it was started.
-3. The task keeps its original deadline, priority, notes, estimated time, and accumulated focus time.
+2. Any task not completed moves to Backlog, whether or not it was started.
+3. The task keeps its course, deadline, priority, notes, estimate, and accumulated focus time.
 4. The next daily summary identifies Backlog items separately.
 
-### 5.7 Deadline change
+### 7.10 Manually changing a deadline
 
-1. Synchronization finds the same Brightspace item with a different deadline.
-2. App updates the synchronized deadline automatically.
-3. User-entered priority, notes, estimated time, Today status, and focus progress remain unchanged.
-4. App records the previous and new deadlines.
-5. User receives an immediate push and email notification showing both values.
-6. If the new deadline crosses a reminder threshold, the appropriate reminder is sent without sending duplicate alerts.
+1. User edits the assessment when an instructor announces a changed deadline.
+2. App stores the new deadline and recalculates reminders.
+3. Priority, notes, Today status, and focus progress remain unchanged.
+4. If the new deadline is inside three days, the app shows an immediate confirmation/alert.
 
-### 5.8 Missing feed item
+### 7.11 Re-importing a revised outline
 
-1. An imported item disappears from the calendar feed.
-2. App does not delete it.
-3. Item moves to Needs review with an explanation that it may have been cancelled, hidden, or temporarily omitted.
-4. User decides whether to retain or remove it.
+Re-import is supported but conservative:
 
-## 6. Information architecture and screens
+1. User uploads a newer outline for an existing course.
+2. App parses it into a comparison draft.
+3. Existing confirmed tasks are never overwritten automatically.
+4. App shows possible additions, removals, and changed dates side by side.
+5. User explicitly accepts each change.
+
+This workflow is useful when an instructor publishes an amended outline, but manual deadline editing remains the normal MVP workflow.
+
+## 8. Information architecture and screens
 
 ### Primary navigation
 
 1. Today
-2. All tasks
-3. New from Brightspace
+2. Semester
+3. All tasks
 4. Backlog
 5. Completed
 6. Settings
@@ -185,79 +237,144 @@ Only one focus timer may be active for the user at a time.
 
 - Daily summary and approaching deadlines
 - Selected Today queue
-- Priority and deadline on every item
+- Course, priority, and deadline on every item
 - Start/resume focus action
 - Backlog warning when applicable
 
+### Semester
+
+- Semester selector
+- Course cards with task counts and nearest deadline
+- Import outlines action
+- Draft import/review status
+- Course detail grouped by assessment category
+
+### Outline review
+
+- PDF filename and detected course information
+- Extracted assessment categories
+- Editable title, type, deadline/time, and weight
+- Source page/excerpt for every item
+- Confidence and missing-information warnings
+- Remove item, save draft, and confirm course actions
+- Import errors explained in plain language
+
 ### All tasks
 
-- High, Medium, and Low sections
+- High, Medium, Low, and Unprioritized sections
 - Nearest deadline first inside each section
-- Add to Today action
 - Course and assessment type filters
+- Add to Today action
 - Manual task creation
-
-### New from Brightspace
-
-- Count of unreviewed imported items
-- Title, course, type, and deadline
-- Priority selector
-- Notes
-- Estimated time for work tasks
-- Accept into plan action
 
 ### Backlog
 
 - Deadline visually emphasized
 - Overdue state clearly differentiated
-- Resume focus, return to Today, edit planning fields, and complete actions
+- Resume focus, return to Today, edit, and complete actions
 
 ### Completed
 
 - Title
-- Original deadline
+- Course
+- Deadline
 - No detailed analytics required for MVP
 
 ### Settings
 
 - Microsoft account information
-- Brightspace feed connection status
-- Masked feed URL and Replace feed action
-- 30/60-minute sync interval
-- Last successful sync and Sync now
 - Daily summary time and time zone
 - Push and email preferences
+- PDF retention preference
 - Export data and Import data
 - Sign out and delete account/data
 
-## 7. Task and synchronization rules
+## 9. Outline parsing specification
+
+### Required extracted course fields
+
+- Course code
+- Course name when present
+- Semester/term when present
+- Outline filename
+
+### Required assessment fields
+
+- Assessment title
+- Assessment category
+- Due date
+- Due time when explicitly stated
+- Grade weight when present
+- Source page number
+- Short source excerpt or table-row evidence
+- Extraction confidence/state
+
+### Assessment categories
+
+- Assignment
+- Quiz
+- Test/Exam
+- Other Assessment
+
+The source wording should be retained. For example, Research Paper may be categorized as Assignment or Other Assessment while keeping Research Paper as its title.
+
+### Date handling
+
+- Never invent a date, time, or year.
+- Date not announced is a valid result.
+- Ambiguous dates require review.
+- The semester year may resolve month/day dates only when the outline clearly identifies the semester.
+- Week numbers without calendar dates remain unresolved unless a schedule table explicitly maps the week to dates.
+- Times default to the user's time zone only after confirmation.
+- If no time is stated, store a date-only deadline rather than assuming 11:59 PM.
+
+### Confidence states
+
+- Ready to confirm
+- Needs date review
+- Needs type review
+- Possible duplicate
+- Could not extract
+
+### Parsing pipeline
+
+1. Validate PDF MIME type, extension, and size.
+2. Extract embedded text and page boundaries.
+3. Extract tables when possible.
+4. Detect low-text/scanned pages and run OCR only where needed.
+5. Send normalized page content to a structured assessment extractor.
+6. Require output to match a strict schema.
+7. Validate dates, categories, duplicates, and course identity.
+8. Attach page evidence to every candidate.
+9. Save only a draft until the user confirms it.
+
+The extraction system may use a language model, but model output is never authoritative. The PDF evidence and user confirmation are the source of truth.
+
+## 10. Task rules
 
 ### Priority ordering
 
 1. High tasks appear before Medium tasks.
 2. Medium tasks appear before Low tasks.
-3. Inside a priority group, the earliest deadline appears first.
-4. Overdue tasks appear before non-overdue tasks within the same priority group.
-5. The app never changes priority automatically in the MVP.
-
-### Brightspace identity and deduplication
-
-Each imported item needs a stable source identity. Prefer the calendar event UID supplied by Brightspace. A fallback fingerprint may combine normalized course, title, and source identifier, but should not use the deadline because deadlines can change.
-
-Synchronization must be idempotent: processing the same feed repeatedly cannot create duplicate tasks.
+3. Low tasks appear before Unprioritized tasks.
+4. Inside a priority group, overdue tasks appear first, followed by the earliest deadline.
+5. Date-not-announced items appear after dated items within their priority group.
+6. The app never changes priority automatically in the MVP.
 
 ### Source-of-truth rules
 
-Brightspace controls:
+The confirmed outline import supplies the initial:
 
-- Source title
-- Course when present in the feed
-- Assessment type when reliably present
-- Official deadline
-- Source event identity
+- Course
+- Assessment title
+- Assessment category
+- Deadline
+- Optional grade weight
+- Source evidence
 
-The user controls:
+The user controls all values after confirmation, including:
 
+- Corrected title/type/deadline
 - Priority
 - Notes
 - Estimated work time
@@ -269,14 +386,14 @@ The user controls:
 ### Reminder rules
 
 - Default deadline reminders: seven days, three days, and one day before.
-- If a new item is already inside one of those windows, notify immediately and schedule only future applicable reminders.
-- If a deadline moves closer, notify immediately and recalculate future reminders.
-- If a deadline moves later, notify immediately and recalculate reminders.
-- Do not send the same reminder threshold more than once for the same deadline version.
+- If a confirmed or manually edited item is already inside a reminder window, notify immediately and schedule only future applicable reminders.
+- Editing a deadline recalculates future reminders.
+- Do not send the same reminder threshold more than once for the same task/deadline combination.
 - Daily summary time is selected by the user.
-- Push and email notifications should contain enough information to act without exposing the private calendar-feed URL.
+- Push and email are both supported.
+- Tasks without a confirmed date do not receive deadline reminders and appear in a Missing dates section of the daily summary.
 
-## 8. Timer behavior
+## 11. Timer behavior
 
 ### Timer states
 
@@ -291,15 +408,15 @@ The user controls:
 ### Required behavior
 
 - Timer is associated with one task.
-- One active timer per user.
+- Only one timer may be active for a user.
 - Server stores authoritative start time, accumulated time, and state.
-- Client derives the displayed countdown from timestamps rather than sending a write every second.
+- Client derives the displayed countdown from timestamps rather than writing every second.
 - Closing the browser does not lose progress.
 - Another signed-in device displays the same timer state.
-- Expiry triggers sound when an active client is open and push/email handling according to notification settings.
-- Additional time is recorded separately from the initial estimate so total planned time can be reconstructed later, even if analytics are not shown in the MVP.
+- Expiry plays a sound when an active client is open.
+- Additional time is stored separately from the initial estimate.
 
-## 9. Suggested data model
+## 12. Suggested data model
 
 ### User
 
@@ -309,54 +426,73 @@ The user controls:
 - display name
 - time zone
 - daily summary time
-- sync interval
+- notification preferences
 - created/updated timestamps
 
-### Brightspace connection
+### Semester
 
+- id
 - user id
-- encrypted calendar-feed URL
-- connection status
-- last attempted sync
-- last successful sync
-- last error category
+- name
+- start date
+- end date
+- active state
 
 ### Course
 
 - id
+- semester id
 - user id
-- source course identifier/name
-- display name
+- course code
+- course name
 - optional color
+- confirmed/draft state
 
-Course colors are optional for MVP and may be added without changing task behavior.
+### Outline import
+
+- id
+- course id or draft course id
+- original filename
+- encrypted/private object-storage key
+- file hash
+- parser version
+- processing state
+- uploaded/processed/confirmed timestamps
+- retention/deletion timestamp
+
+### Extraction candidate
+
+- id
+- outline import id
+- proposed title
+- proposed category
+- proposed deadline/time
+- proposed weight
+- page number
+- source excerpt
+- confidence state
+- user corrections
+- accepted/removed state
 
 ### Task
 
 - id
 - user id
-- source: Brightspace or manual
-- source event UID when imported
+- semester id
+- course id or null
+- source: outline or manual
+- extraction candidate id or null
 - title
-- course id/name
-- type: assignment, quiz, test, or manual
-- official deadline
-- previous deadline when recently changed
-- priority: high, medium, or low
+- type: assignment, quiz, test/exam, other assessment, or manual
+- deadline and whether it is date-only
+- initial outline deadline
+- optional grade weight
+- priority: high, medium, low, or unprioritized
 - notes
 - estimated seconds
 - accumulated focus seconds
-- state: inbox, active, today, backlog, completed, or needs review
-- original deadline for completion history
+- state: active, today, backlog, or completed
 - created/updated/completed timestamps
-
-### Deadline version
-
-- task id
-- previous deadline
-- new deadline
-- detected timestamp
-- source sync id
 
 ### Focus session
 
@@ -372,120 +508,153 @@ Course colors are optional for MVP and may be added without changing task behavi
 
 - user id
 - task id when applicable
-- notification type and deadline version
+- notification type
+- task deadline used for scheduling
 - channel: push or email
 - scheduled/sent/failed timestamps
 - deduplication key
 
-## 10. Recommended technical architecture
+## 13. Recommended technical architecture
 
 ### Client
 
 - Responsive React/TypeScript PWA
 - Accessible desktop and mobile layouts
+- Multi-file drag-and-drop PDF upload
+- PDF page/excerpt viewer for verification
 - Service worker for installation, caching, and push notifications
-- Local cache for fast loading and limited offline access
+- Local cache for fast loading and limited offline viewing
 
 ### Authentication
 
 - Microsoft OpenID Connect/OAuth sign-in
 - Restrict the MVP to the intended University of Calgary account if desired
 - Secure server session using HTTP-only cookies
-- Microsoft sign-in is planner authentication only; it does not grant Brightspace API access
+- Microsoft sign-in is planner authentication only; it does not grant Brightspace access
 
 ### Backend
 
 - TypeScript API/server functions
-- Relational database for users, tasks, deadlines, sessions, and notification state
-- Background job scheduler for 30/60-minute feed sync, reminders, daily summaries, and end-of-day rollover
-- Queue/retry system for email and push delivery
+- Relational database for users, semesters, courses, candidates, tasks, timers, and notification state
+- Private object storage for temporary course-outline files
+- Asynchronous document-processing jobs
+- Background scheduler for reminders, daily summaries, and end-of-day rollover
+- Queue/retry system for parsing, email, and push delivery
+
+### Document-processing service
+
+- Embedded PDF text extraction
+- Table extraction
+- OCR fallback for scanned pages
+- Strict structured-output extraction
+- Page-level evidence and confidence validation
+- Parser versioning so results can be reproduced and improved
 
 ### External services
 
 - Microsoft identity platform for planner sign-in
-- Brightspace calendar feed for MVP discovery
 - Transactional email provider
 - Web Push for browser notifications
+- PDF/OCR and structured extraction provider(s)
 
-### Security requirements
+## 14. Security and privacy requirements
 
 - Never collect or store the user's University password or MFA codes.
-- Treat the calendar-feed URL as a secret credential.
-- Encrypt the feed URL at rest using a server-managed encryption key.
-- Mask it in the UI and never place it in logs, analytics, error messages, or notification content.
-- Enforce per-user authorization on every task and settings operation.
+- Course outlines are private user documents and must not be publicly accessible.
+- Use short-lived signed URLs for document access.
+- Encrypt stored files and database data at rest using platform-managed encryption.
+- Do not place document text in logs, analytics, or error messages.
+- Enforce per-user authorization for every semester, course, file, task, and timer operation.
 - Use CSRF protection and secure cookie settings.
+- Delete original PDFs after confirmation by default, unless the user chooses to retain them for source review.
+- Store page evidence needed for verification only as long as required by the retention choice.
+- Do not use uploaded outlines for model training.
 - Provide account/data deletion.
-- Keep an audit trail for deadline changes and connection failures.
-- Exported backups should exclude the raw feed URL by default.
+- Exclude original PDFs from normal planner exports unless explicitly selected.
 
-## 11. MVP acceptance criteria
+## 15. MVP acceptance criteria
 
 The MVP is complete when all of the following are true:
 
 1. User can sign in with the selected Microsoft school account.
-2. User can securely add and validate a Brightspace calendar-feed URL.
-3. Scheduled sync runs every 30 or 60 minutes even when the app is closed.
-4. Sync now produces a visible success or actionable error state.
-5. Repeated sync does not create duplicate tasks.
-6. New supported schoolwork appears in the inbox and triggers notification.
-7. User can set priority, notes, and estimated time and accept an item.
-8. User can create manual tasks.
-9. Active tasks are grouped High/Medium/Low and sorted by deadline.
-10. User can select tasks for Today.
-11. Timer can start, pause, resume, survive browser closure, and synchronize across devices.
-12. Timer expiry plays a sound and presents the three agreed actions.
-13. Keep working accepts an additional duration.
-14. Finish later moves the task to Backlog with a highlighted deadline.
-15. End-of-day rollover moves incomplete Today tasks to Backlog.
-16. Deadline changes preserve user planning data and send immediate push/email alerts.
-17. Missing source items move to Needs review rather than being deleted.
-18. Seven-day, three-day, one-day, urgent, and daily-summary notifications are deduplicated.
-19. Completed section shows title and original deadline.
-20. User can export and import their planner data.
-21. User can sign out and delete the planner account and stored data.
+2. User can create and select a semester.
+3. User can upload several valid course-outline PDFs in one session.
+4. App reports unsupported, corrupt, oversized, or password-protected files clearly.
+5. Native-text PDFs are parsed and scanned PDFs use OCR fallback.
+6. App creates one draft course per outline and does not create active tasks before confirmation.
+7. Parser extracts assessment titles, categories, dates/times, optional weights, and source pages when available.
+8. Missing or ambiguous fields are highlighted instead of invented.
+9. User can view source evidence and correct, remove, or add assessment items.
+10. User can confirm a course and see its complete semester task list.
+11. Reprocessing the same file does not create duplicate confirmed tasks.
+12. User can create and edit manual tasks.
+13. User can manually update any deadline.
+14. Active tasks are grouped by priority and sorted by deadline.
+15. User can select tasks for Today.
+16. Timer can start, pause, resume, survive browser closure, and synchronize across devices.
+17. Timer expiry plays a sound and presents Finished, Keep working, and Finish later.
+18. Keep working accepts an additional duration.
+19. Finish later moves the task to Backlog with a highlighted deadline.
+20. End-of-day rollover moves incomplete Today tasks to Backlog.
+21. Seven-day, three-day, one-day, urgent, and daily-summary notifications are deduplicated.
+22. Completed section shows title, course, and deadline.
+23. User can export and import planner data.
+24. User can sign out and delete the planner account and stored data.
 
-## 12. Development milestones
+## 16. Development milestones
 
-### Milestone 0: Feasibility spike
+### Milestone 0: Outline-parsing feasibility spike
 
-- Obtain a real UCalgary Brightspace calendar-feed sample from the owner.
-- Verify its authentication behavior, refresh behavior, CORS irrelevance on server, UID stability, course metadata, assessment labels, cancellations, and deadline updates.
+- Collect 5–10 privacy-scrubbed UCalgary course-outline PDFs representing different faculties, layouts, tables, and at least one scanned file if available.
+- Define the strict extraction schema.
+- Test embedded text extraction, table extraction, and OCR fallback.
+- Measure assessment recall, incorrect extractions, date accuracy, and page-evidence accuracy.
 - Confirm Microsoft tenant sign-in configuration for the selected school account.
-- Decide which imported events can be classified safely as assignment, quiz, or test.
-- Produce a short go/no-go report before building the sync system.
+- Decide PDF file-size limit and default retention policy.
 
-Exit condition: the feed can be fetched securely and produces stable enough records for the MVP, or the plan is revised before implementation.
+Exit condition: on the sample set, all real assessments are either extracted correctly or clearly flagged for review, and no unsupported claim silently becomes a confirmed task.
 
 ### Milestone 1: Product foundation
 
 - Microsoft sign-in
 - User settings and time zone
 - Cloud database and authorization boundaries
+- Semester and course models
 - Responsive application shell
 - Manual task creation
 - High/Medium/Low grouping and deadline ordering
 
-### Milestone 2: Brightspace inbox
+### Milestone 2: PDF import pipeline
 
-- Secure feed onboarding
-- Server-side feed parser
-- Stable deduplication
-- Sync now
-- Scheduled 30/60-minute sync
-- New from Brightspace inbox
-- Deadline version tracking
-- Needs review behavior
+- Multi-file upload
+- Private temporary file storage
+- Text/table extraction
+- OCR fallback
+- Structured assessment extraction
+- Validation, confidence states, and page evidence
+- Processing progress and error recovery
 
-### Milestone 3: Daily planning and task lifecycle
+### Milestone 3: Course review and semester plan
+
+- Draft course screen
+- Editable extracted assessments
+- PDF evidence viewer
+- Missing/ambiguous date handling
+- Confirm course workflow
+- Course-grouped semester view
+- Duplicate prevention
+- Conservative revised-outline comparison
+
+### Milestone 4: Daily planning and task lifecycle
 
 - Add/remove tasks from Today
 - Backlog
 - End-of-day rollover
 - Completed section
-- Cross-device real-time or near-real-time synchronization
+- Manual deadline editing
+- Cross-device synchronization
 
-### Milestone 4: Focus timer
+### Milestone 5: Focus timer
 
 - Start, pause, resume, and synchronized countdown
 - Browser-close recovery
@@ -493,32 +662,44 @@ Exit condition: the feed can be fetched securely and produces stable enough reco
 - Finish, additional time, and defer outcomes
 - One-active-timer enforcement
 
-### Milestone 5: Notifications
+### Milestone 6: Notifications
 
 - Push subscription and delivery
 - Email delivery
 - Seven-day, three-day, and one-day reminders
-- Urgent new-task and deadline-change alerts
+- Urgent alerts for newly confirmed or manually shortened deadlines
 - Configurable daily summary
+- Missing-date summary
 - Delivery deduplication and retry handling
 
-### Milestone 6: Reliability and launch
+### Milestone 7: Reliability and private launch
 
 - Export/import backup
-- Feed replacement and connection-error recovery
 - Accessibility and responsive QA
-- Security review
-- Automated tests for sync, deadline changes, ordering, timer state, rollover, and notifications
+- Security and document-retention review
+- Automated parser, planning, timer, rollover, and notification tests
 - Monitoring and private production deployment
 
-## 13. Test strategy
+## 17. Test strategy
+
+### Parser evaluation set
+
+Maintain a privacy-scrubbed set of representative outlines with a manually verified answer file. Track:
+
+- Assessment recall
+- Incorrect assessment rate
+- Exact date/time accuracy
+- Category accuracy
+- Course-code accuracy
+- Source-page accuracy
+- Missing/ambiguous field detection
 
 ### Unit tests
 
+- Date normalization without invented values
+- Category normalization while preserving source wording
+- Duplicate detection by file hash and assessment identity
 - Priority/deadline ordering
-- Calendar normalization and type filtering
-- Stable deduplication
-- Deadline-change detection
 - Reminder threshold calculations
 - End-of-day rollover
 - Timer state transitions
@@ -526,85 +707,119 @@ Exit condition: the feed can be fetched securely and produces stable enough reco
 ### Integration tests
 
 - Microsoft sign-in callback and account restrictions
-- Encrypted feed storage and server fetch
-- Repeat sync and changed/deleted feed events
+- Authorized upload and private file access
+- Text PDF and scanned PDF processing
+- Parser failure/retry behavior
+- Course confirmation transaction
 - Cross-device timer state
 - Push/email deduplication
 - Export/import round trip
 
 ### End-to-end scenarios
 
-- New assignment appears, is accepted, planned, focused, and completed.
-- Instructor moves a deadline closer and the correct notification is sent.
+- User uploads several outlines and confirms a complete semester plan.
+- Outline contains a table with multiple assessment types and dates.
+- Outline contains Date TBD and the app does not invent a value.
+- Parser proposes an incorrect item and the user removes it before confirmation.
+- User manually changes a deadline and reminders are recalculated.
 - Today task is not started and moves to Backlog at day end.
 - Timer expires and each of the three outcomes behaves correctly.
-- Feed temporarily drops an item without deleting user planning data.
 
-## 14. Key risks and mitigations
+## 18. Key risks and mitigations
 
-### Calendar feed completeness
+### Outline variation
 
-Risk: instructors may not publish every assessment in the calendar, and type metadata may be inconsistent.
+Risk: UCalgary recommends a course-outline template, but faculties and instructors may use different tables, wording, and layouts.
 
-Mitigation: feasibility spike, visible last-sync status, manual task creation, clear messaging that calendar sync is an aid rather than the authoritative submission system, and long-term official API integration.
+Mitigation: hybrid text/table/OCR pipeline, strict schema, page evidence, confidence states, representative evaluation set, and mandatory user confirmation.
 
-### Private feed exposure
+### Missing or provisional dates
 
-Risk: anyone with the feed URL may be able to read calendar data.
+Risk: outlines may contain Date TBD, date ranges, week numbers, or dates later scheduled by the Registrar.
 
-Mitigation: encrypt at rest, never log or export by default, mask in UI, allow immediate replacement/removal, and restrict all access by user identity.
+Mitigation: allow date-not-announced tasks, never infer unsupported values, show a Missing dates section, and support fast manual editing.
+
+### Parser hallucination
+
+Risk: a model may convert policies, examples, or late-assignment text into fake assessments.
+
+Mitigation: require source-page evidence, validate against assessment sections/tables, keep all output in draft, and never create active tasks before confirmation.
+
+### Scanned or inaccessible PDFs
+
+Risk: OCR may misread course codes, numbers, or dates.
+
+Mitigation: OCR only as fallback, flag low-confidence fields, show the original page, and make correction quick.
+
+### Private document exposure
+
+Risk: course outlines may contain internal course information.
+
+Mitigation: private object storage, strict authorization, short-lived file URLs, no document logging, configurable retention, and deletion after confirmation by default.
 
 ### Missed notifications
 
 Risk: browser push can be disabled or unavailable.
 
-Mitigation: send email as a second channel, show notification health in Settings, and display in-app alerts and sync status.
+Mitigation: email as a second channel, notification-health status in Settings, and in-app reminders.
 
-### Incorrect automatic classification
+## 19. Deferred decisions
 
-Risk: calendar event titles may not reliably identify assignments, quizzes, and tests.
-
-Mitigation: import only high-confidence supported items in the MVP and retain manual task creation. Revisit Needs review classification after evaluating a real feed.
-
-### School approval for full API integration
-
-Risk: an official Brightspace app requires institutional registration and privacy/security review.
-
-Mitigation: treat the calendar feed as the MVP integration and begin the university approval process as a separate future workstream.
-
-## 15. Deferred decisions
-
-These do not block MVP feasibility work but must be decided before their related milestone:
+These do not block the feasibility spike but must be decided before the related milestone:
 
 - Exact Microsoft identity configuration and whether access is restricted to one account
 - Cloud platform, database, job scheduler, email provider, and push service
+- PDF parsing/OCR/model providers
+- Maximum PDF size and page count
+- Original-PDF retention period after confirmation
 - Course colors
 - Exact additional-time choices after timer expiry
 - Exact end-of-day rollover time if different from midnight
-- Offline editing and conflict-resolution depth
-- Import behavior for uncertain calendar-event types
-- Ignore/Not schoolwork controls
 - Data retention period for completed tasks and notification logs
 - Whether exports are encrypted
+- How Other Assessments are subdivided after observing real outlines
 
-## 16. Future roadmap
+## 20. Future roadmap
 
 ### Phase 2
 
-- Begin University of Calgary request for an approved Brightspace OAuth application.
-- Replace calendar keyword/type inference with official assessment data.
-- Detect submission/completion state when permitted.
-- Improve course mapping and cancellation handling.
+- Improved revised-outline comparison
+- Optional automatic categorization learned from confirmed outline examples
+- Native desktop wrapper with local file import and stronger background behavior
+- Native mobile application and richer push actions
 
 ### Phase 3
 
-- Native desktop wrapper with stronger background behavior.
-- Native mobile application and richer push actions.
-- Optional automatic priority recommendations based on deadline and estimated effort.
-- Calendar time-blocking and availability-aware scheduling.
-- Focus analytics and estimation feedback.
+- Optional University-approved Brightspace OAuth/API integration
+- Automatic detection of changed deadlines and new assessments
+- Submission/completion detection when permitted
+- Optional automatic priority recommendations
+- Calendar time-blocking and availability-aware scheduling
+- Focus analytics and estimation feedback
 
-## 17. First development action
+## 21. First development action
 
-Do not begin the full product build with UI implementation. Begin with Milestone 0 using a real, privacy-scrubbed Brightspace calendar-feed sample. The feed's completeness and stability are the largest unknowns in the MVP, and validating them first prevents building the product around an unreliable source.
+Begin with Milestone 0, not the final interface. Collect a small set of representative, privacy-scrubbed course-outline PDFs and build a disposable parser proof of concept that outputs strict structured data with page evidence.
 
+The first proof-of-concept deliverable should be a JSON result shaped like:
+
+```json
+{
+  "courseCode": "CPSC 111",
+  "courseName": "Introduction to Computing",
+  "semester": "Fall 2026",
+  "assessments": [
+    {
+      "title": "Assignment 1",
+      "category": "assignment",
+      "dueDate": "2026-09-25",
+      "dueTime": null,
+      "weightPercent": 10,
+      "sourcePage": 4,
+      "confidence": "ready_to_confirm"
+    }
+  ]
+}
+```
+
+Do not proceed to full UI development until the parser spike demonstrates that wrong or missing information is exposed for review rather than silently accepted.

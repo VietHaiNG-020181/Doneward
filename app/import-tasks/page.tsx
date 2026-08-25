@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { ASSESSMENT_CATEGORIES, createAssessment, formatFileSize, normalizeGptExtraction, targetMinutesFor, type GptOutlineExtraction } from "@/lib/outline-import";
 import { loadOutlineDrafts, loadTasks, saveOutlineDrafts, saveTasks, type DraftAssessment, type DraftCourse, type Task } from "@/lib/doneward-store";
 
@@ -185,8 +186,8 @@ export default function ImportTasksPage() {
 
   return <main className="import-app">
     <aside className="import-sidebar">
-      <a className="brand" href="/"><span className="brand-mark">D</span><span>Doneward</span></a>
-      <nav aria-label="Main navigation"><a className="nav-item" href="/"><span>◈</span> Today</a><a className="nav-item" href="/"><span>○</span> All tasks</a><a className="nav-item active" href="/import-tasks"><span>↳</span> Import tasks</a></nav>
+      <Link className="brand" href="/"><span className="brand-mark">D</span><span>Doneward</span></Link>
+      <nav aria-label="Main navigation"><Link className="nav-item" href="/"><span>◈</span> Today</Link><Link className="nav-item" href="/"><span>○</span> All tasks</Link><Link className="nav-item active" href="/import-tasks"><span>↳</span> Import tasks</Link></nav>
       <div className="import-note"><span>◇</span><p><strong>Personal automation</strong>The extension works only in your browser. Doneward never receives your ChatGPT login or cookies.</p></div>
     </aside>
 
@@ -219,7 +220,7 @@ export default function ImportTasksPage() {
           <div className="extraction-state success"><span>✓</span><div><strong>{selected.assessments.length} task{selected.assessments.length === 1 ? "" : "s"} returned from ChatGPT</strong><p>Review the four requested fields below, then import the confirmed deadlines.</p></div></div>
           <div className="assessment-heading"><div><h3>Course tasks</h3><p>Unknown deadlines stay blank until you fill them in.</p></div><button className="secondary-button" onClick={() => updateCourse({ assessments: [...selected.assessments, createAssessment()] })}>+ Add task</button></div>
           <div className="assessment-list">{selected.assessments.length === 0 ? <div className="assessment-empty">No tasks were returned. Add one manually or retry the outline.</div> : selected.assessments.map((item, index) => <article className="assessment-row assessment-row-simple" key={item.id}><div className="assessment-number">{index + 1}</div><label>Task name<input value={item.taskName} onChange={(event) => updateAssessment(item.id, { taskName: event.target.value })} placeholder="e.g. Assignment 1" /></label><label>Category<select value={item.category} onChange={(event) => updateAssessment(item.id, { category: event.target.value as DraftAssessment["category"] })}>{ASSESSMENT_CATEGORIES.map((category) => <option value={category} key={category}>{category[0].toUpperCase() + category.slice(1)}</option>)}</select></label><label>Deadline<input value={item.deadline} onChange={(event) => updateAssessment(item.id, { deadline: event.target.value })} placeholder="YYYY-MM-DD or date + time" /></label><button className="remove-assessment" onClick={() => removeAssessment(item.id)} aria-label={`Remove task ${index + 1}`}>×</button></article>)}</div>
-          <footer className="review-footer"><p>Imported tasks start as <strong>Unprioritized</strong>, and Doneward orders them by urgency and nearest deadline.</p><div><a className="secondary-button" href="/">Cancel</a><button className="primary-button" onClick={confirmCourse}>Import tasks</button></div></footer>
+          <footer className="review-footer"><p>Imported tasks start as <strong>Unprioritized</strong>, and Doneward orders them by urgency and nearest deadline.</p><div><Link className="secondary-button" href="/">Cancel</Link><button className="primary-button" onClick={confirmCourse}>Import tasks</button></div></footer>
         </section>
       </div>}
     </section>

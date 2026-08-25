@@ -1,3 +1,5 @@
+/* global chrome */
+
 const CATEGORIES = new Set(["assignment", "quiz", "test", "exam", "project", "lab", "paper", "presentation", "other"]);
 
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));

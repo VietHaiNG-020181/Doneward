@@ -91,19 +91,16 @@ export default function Home() {
   const [editing, setEditing] = useState<Task | null | "new">(null);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
-  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>("default");
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(() => typeof Notification === "undefined" ? "default" : Notification.permission);
   const [showReminderPrompt, setShowReminderPrompt] = useState(true);
-  const [dayLabel, setDayLabel] = useState("TODAY");
-  const [welcome, setWelcome] = useState("Welcome back.");
+  const [clock, setClock] = useState(Date.now);
   const tickRef = useRef<number | null>(null);
 
   useEffect(() => {
     loadTasks().then((saved) => setTasks(saved?.length ? saved : starterTasks())).finally(() => setReady(true));
-    if ("Notification" in window) setNotificationPermission(Notification.permission);
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
-    const now = new Date();
-    setDayLabel(now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" }).toUpperCase());
-    setWelcome(now.getHours() < 12 ? "Good morning." : now.getHours() < 18 ? "Good afternoon." : "Good evening.");
+    const clockId = window.setInterval(() => setClock(Date.now()), 60000);
+    return () => window.clearInterval(clockId);
   }, []);
 
   useEffect(() => { if (ready) saveTasks(tasks).catch(() => undefined); }, [tasks, ready]);
@@ -141,7 +138,7 @@ export default function Home() {
   const currentDay = todayKey();
   const todayTasks = activeTasks.filter((task) => task.plannedDate === currentDay);
   const nextTask = view === "today" ? todayTasks[0] : activeTasks[0];
-  const upcomingTasks = activeTasks.filter((task) => !isToday(task.deadline) && deadlineDate(task.deadline).getTime() >= Date.now());
+  const upcomingTasks = activeTasks.filter((task) => !isToday(task.deadline) && deadlineDate(task.deadline).getTime() >= clock);
   const visibleTasks = view === "today" ? todayTasks : view === "upcoming" ? upcomingTasks : view === "history" ? completed : activeTasks;
   const focusTask = tasks.find((task) => task.id === focusId);
   const remainingToday = todayTasks.reduce((sum, task) => sum + Math.max(0, task.targetMinutes - task.focusedSeconds / 60), 0);
@@ -199,7 +196,7 @@ export default function Home() {
 
       <section className="workspace">
         <header className="topbar">
-          <div><p className="eyebrow">{dayLabel}</p><h1>{welcome}</h1><p>One clear step at a time.</p></div>
+          <div><p className="eyebrow">{new Date(clock).toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" }).toUpperCase()}</p><h1>{new Date(clock).getHours() < 12 ? "Good morning." : new Date(clock).getHours() < 18 ? "Good afternoon." : "Good evening."}</h1><p>One clear step at a time.</p></div>
           <button className="primary-button" onClick={() => setEditing("new")}>+ Add task</button>
         </header>
 
@@ -217,7 +214,7 @@ export default function Home() {
 
         <section className="task-section">
           <div className="section-heading"><h2>{view === "today" ? "Today" : view === "all" ? "Upcoming" : view === "upcoming" ? "Backlog" : "Completed"}</h2><span>{visibleTasks.length} {visibleTasks.length === 1 ? "task" : "tasks"}</span></div>
-          {!ready ? <div className="empty-state">Loading your plan…</div> : visibleTasks.length === 0 ? <div className="empty-state"><strong>{view === "today" ? "Your Today list is clear." : "Nothing here yet."}</strong><span>{view === "today" ? "Choose the tasks you want to work on from Upcoming." : "Your next clear step can start small."}</span><button onClick={() => view === "today" ? setView("all") : setEditing("new")}>{view === "today" ? "Choose today’s tasks" : "Add a task"}</button></div> : view === "today" || view === "all" ? <TaskGroups tasks={visibleTasks} currentDay={currentDay} onComplete={toggleComplete} onFocus={openFocus} onEdit={setEditing} onToggleToday={toggleToday} /> : visibleTasks.map((task, index) => <TaskCard key={task.id} task={task} urgent={index === 0 && !task.completed} onComplete={() => toggleComplete(task)} onFocus={() => openFocus(task.id)} onEdit={() => setEditing(task)} />)}
+          {!ready ? <div className="empty-state">Loading your plan…</div> : visibleTasks.length === 0 ? <div className="empty-state"><strong>{view === "today" ? "Your Today list is clear." : "Nothing here yet."}</strong><span>{view === "today" ? "Choose the tasks you want to work on from Upcoming." : "Your next clear step can start small."}</span><button onClick={() => view === "today" ? setView("all") : setEditing("new")}>{view === "today" ? "Choose today’s tasks" : "Add a task"}</button></div> : view === "today" || view === "all" ? <TaskGroups tasks={visibleTasks} currentDay={currentDay} now={clock} onComplete={toggleComplete} onFocus={openFocus} onEdit={setEditing} onToggleToday={toggleToday} /> : visibleTasks.map((task, index) => <TaskCard key={task.id} task={task} now={clock} urgent={index === 0 && !task.completed} onComplete={() => toggleComplete(task)} onFocus={() => openFocus(task.id)} onEdit={() => setEditing(task)} />)}
         </section>
       </section>
 
@@ -232,11 +229,11 @@ function Nav({ active, onClick, symbol, label, count }: { active: boolean; onCli
   return <button className={`nav-item ${active ? "active" : ""}`} onClick={onClick}><span>{symbol}</span>{label}{count !== undefined && <b>{count}</b>}</button>;
 }
 
-function TaskGroups({ tasks, currentDay, onComplete, onFocus, onEdit, onToggleToday }: { tasks: Task[]; currentDay: string; onComplete: (task: Task) => void; onFocus: (id: string) => void; onEdit: (task: Task) => void; onToggleToday: (task: Task) => void }) {
+function TaskGroups({ tasks, currentDay, now, onComplete, onFocus, onEdit, onToggleToday }: { tasks: Task[]; currentDay: string; now: number; onComplete: (task: Task) => void; onFocus: (id: string) => void; onEdit: (task: Task) => void; onToggleToday: (task: Task) => void }) {
   const groups = new Map<string, Task[]>();
   tasks.forEach((task) => { const group = courseGroup(task); groups.set(group, [...(groups.get(group) ?? []), task]); });
   const entries = [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
-  return <div className="course-groups">{entries.map(([group, items]) => <section className="course-group" key={group}><div className="course-group-head"><h3>{group}</h3><span>{items.length} {items.length === 1 ? "task" : "tasks"}</span></div>{items.map((task) => <TaskCard key={task.id} task={task} urgent={task.id === tasks[0]?.id && !task.completed} plannedToday={task.plannedDate === currentDay} showTodayAction onComplete={() => onComplete(task)} onFocus={() => onFocus(task.id)} onEdit={() => onEdit(task)} onToggleToday={() => onToggleToday(task)} />)}</section>)}</div>;
+  return <div className="course-groups">{entries.map(([group, items]) => <section className="course-group" key={group}><div className="course-group-head"><h3>{group}</h3><span>{items.length} {items.length === 1 ? "task" : "tasks"}</span></div>{items.map((task) => <TaskCard key={task.id} task={task} now={now} urgent={task.id === tasks[0]?.id && !task.completed} plannedToday={task.plannedDate === currentDay} showTodayAction onComplete={() => onComplete(task)} onFocus={() => onFocus(task.id)} onEdit={() => onEdit(task)} onToggleToday={() => onToggleToday(task)} />)}</section>)}</div>;
 }
 
 function Progress({ task }: { task: Task }) {
@@ -244,10 +241,10 @@ function Progress({ task }: { task: Task }) {
   return <div className="progress-ring" style={{ "--progress": `${progress}%` } as React.CSSProperties} aria-label={`${progress} percent complete`}><span>{progress}%</span></div>;
 }
 
-function TaskCard({ task, urgent, plannedToday, showTodayAction, onComplete, onFocus, onEdit, onToggleToday }: { task: Task; urgent?: boolean; plannedToday?: boolean; showTodayAction?: boolean; onComplete: () => void; onFocus: () => void; onEdit: () => void; onToggleToday?: () => void }) {
+function TaskCard({ task, now, urgent, plannedToday, showTodayAction, onComplete, onFocus, onEdit, onToggleToday }: { task: Task; now: number; urgent?: boolean; plannedToday?: boolean; showTodayAction?: boolean; onComplete: () => void; onFocus: () => void; onEdit: () => void; onToggleToday?: () => void }) {
   const remaining = task.targetMinutes - task.focusedSeconds / 60;
   const progress = Math.min(100, Math.round(task.focusedSeconds / 60 / Math.max(1, task.targetMinutes) * 100));
-  const overdue = deadlineDate(task.deadline).getTime() < Date.now() && !task.completed;
+  const overdue = deadlineDate(task.deadline).getTime() < now && !task.completed;
   return <article className={`task-card ${urgent ? "urgent" : ""} ${task.completed ? "done" : ""}`}>
     <button className="check" onClick={onComplete} aria-label={`${task.completed ? "Reopen" : "Complete"} ${task.title}`}>{task.completed ? "✓" : ""}</button>
     <div className="task-main" onDoubleClick={onEdit}><h3>{task.title}</h3>{task.course && <span className="course-line">{task.course} · {task.assessmentType}</span>}<p>{task.completed ? (task.targetMinutes ? `${formatDuration(task.focusedSeconds / 60)} focused` : "Completed") : task.targetMinutes ? `${formatDuration(remaining)} remaining of ${formatDuration(task.targetMinutes)}` : "Deadline only"}</p>{!task.completed && task.targetMinutes > 0 && <div className="bar"><span style={{ width: `${progress}%` }} /></div>}</div>
@@ -258,8 +255,8 @@ function TaskCard({ task, urgent, plannedToday, showTodayAction, onComplete, onF
 }
 
 function TaskModal({ task, onClose, onSave, onDelete }: { task?: Task; onClose: () => void; onSave: (event: FormEvent<HTMLFormElement>) => void; onDelete?: () => void }) {
-  return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="task-modal-title"><div className="modal-head"><div><span className="label dark">{task ? "EDIT TASK" : "NEW TASK"}</span><h2 id="task-modal-title">{task ? "Shape the next step" : "What needs your focus?"}</h2></div><button onClick={onClose} aria-label="Close">×</button></div>
-    <form onSubmit={onSave}><label>Task name<input name="title" defaultValue={task?.title} placeholder="e.g. Draft project proposal" required autoFocus /></label><label>Notes<textarea name="notes" defaultValue={task?.notes} placeholder="A useful first step, context, or definition of done" rows={3} /></label><div className="form-grid"><label>Deadline<input type={task?.deadline && /^\d{4}-\d{2}-\d{2}$/.test(task.deadline) ? "date" : "datetime-local"} name="deadline" defaultValue={task?.deadline ?? dateAt(0, 17)} required /></label><label>Focus target<select name="targetMinutes" defaultValue={task?.targetMinutes ?? 60}><option value="0">Deadline only</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60">1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option><option value="180">3 hours</option><option value="240">4 hours</option></select></label><label>Importance<select name="importance" defaultValue={task?.importance ?? "Medium"}><option>Unprioritized</option><option>Low</option><option>Medium</option><option>High</option></select></label><label>Remind me<select name="reminderMinutes" defaultValue={task?.reminderMinutes ?? 30}><option value="10">Every 10 minutes</option><option value="30">Every 30 minutes</option><option value="60">Every hour</option><option value="120">Every 2 hours</option></select></label></div><div className="modal-actions">{onDelete && <button type="button" className="delete-button" onClick={onDelete}>Delete</button>}<span /><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit">{task ? "Save changes" : "Add task"}</button></div></form>
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="task-modal-title"><div className="modal-head"><div><span className="label dark">{task ? "EDIT TASK" : "NEW TASK"}</span><h2 id="task-modal-title">{task ? "Shape the next step" : "What needs your focus?"}</h2></div><button onClick={onClose} aria-label="Close">×</button></div>
+    <form onSubmit={onSave}><label>Task name<input name="title" defaultValue={task?.title} placeholder="e.g. Draft project proposal" required /></label><label>Notes<textarea name="notes" defaultValue={task?.notes} placeholder="A useful first step, context, or definition of done" rows={3} /></label><div className="form-grid"><label>Deadline<input type={task?.deadline && /^\d{4}-\d{2}-\d{2}$/.test(task.deadline) ? "date" : "datetime-local"} name="deadline" defaultValue={task?.deadline ?? dateAt(0, 17)} required /></label><label>Focus target<select name="targetMinutes" defaultValue={task?.targetMinutes ?? 60}><option value="0">Deadline only</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60">1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option><option value="180">3 hours</option><option value="240">4 hours</option></select></label><label>Importance<select name="importance" defaultValue={task?.importance ?? "Medium"}><option>Unprioritized</option><option>Low</option><option>Medium</option><option>High</option></select></label><label>Remind me<select name="reminderMinutes" defaultValue={task?.reminderMinutes ?? 30}><option value="10">Every 10 minutes</option><option value="30">Every 30 minutes</option><option value="60">Every hour</option><option value="120">Every 2 hours</option></select></label></div><div className="modal-actions">{onDelete && <button type="button" className="delete-button" onClick={onDelete}>Delete</button>}<span /><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit">{task ? "Save changes" : "Add task"}</button></div></form>
   </section></div>;
 }
 

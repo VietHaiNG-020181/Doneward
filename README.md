@@ -1,100 +1,78 @@
-# vinext-starter
+# Doneward
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+Doneward is a privacy-minded academic task planner. It helps students turn course-outline deadlines into a reviewed semester plan, choose work for today, and stay focused with task timers.
 
-## Prerequisites
+The current prototype runs as a responsive web app and stores planner data in the browser. Course-outline extraction is performed through an optional personal Chrome/Edge extension that uses the user's already signed-in ChatGPT tab. Review is mandatory before extracted tasks are added.
 
-- Node.js `>=22.13.0`
+## Current features
 
-## Quick Start
+- Today, Upcoming, Backlog, and completed task views
+- Manual priority, deadline, course, and focus-duration controls
+- Persistent browser storage through IndexedDB
+- PDF course-outline import with structured review
+- Optional personal ChatGPT bridge for PDF extraction
+- Installable PWA shell and offline fallback
+
+## Requirements
+
+- Node.js 22.13 or newer
+- npm
+- Chrome or Edge for the optional course-outline bridge
+
+## Local development
 
 ```bash
 npm install
 npm run dev
-npm run build
 ```
 
-This starter does not use `wrangler.jsonc`.
+Open the local address printed by the development server.
 
-## Included Shape
+## Validation
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
-
-The user ID is stable for the same user on the same Site and different across Sites. Email and name are intended for display or contact purposes.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const userId = requestHeaders.get("oai-authenticated-user-id");
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```bash
+npm run lint
+npm test
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+`npm test` performs a production build before running the Node test suite.
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+## Course-outline bridge
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+The optional extension lives in `doneward-chatgpt-bridge/`. To load it locally:
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+1. Open `chrome://extensions` or `edge://extensions`.
+2. Enable Developer mode.
+3. Select **Load unpacked** and choose `doneward-chatgpt-bridge/`.
+4. Sign in to ChatGPT in the same browser.
+5. Return to Doneward and use **Import tasks**.
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
+The extension is restricted to the Doneward production origin, localhost development pages, and `chatgpt.com`. It does not request cookie access or read passwords. During an import, the selected PDF is temporarily stored in extension-local storage, sent to the created ChatGPT tab, and removed from storage after delivery. Stale jobs are deleted after 24 hours.
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
+Because this prototype automates ChatGPT's web interface, interface changes can require an extension update. Always review the returned course name, task names, categories, and deadlines before importing.
 
-## Useful Commands
+## Data and privacy
 
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+- Planner tasks and import drafts stay in the browser's IndexedDB in the current prototype.
+- PDFs pass directly from the Doneward page to the local extension; the Doneward server does not receive them.
+- The extension can interact only with the origins declared in its manifest.
+- `.env*`, build output, local Cloudflare state, and dependencies are excluded from Git.
 
-## Learn More
+See [SECURITY.md](SECURITY.md) for reporting and operational guidance and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the system design and trust boundaries.
 
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+## Project structure
+
+- `app/` — application routes and interface
+- `lib/` — browser persistence and import normalization
+- `worker/` — Cloudflare Worker entry point
+- `doneward-chatgpt-bridge/` — optional browser extension source
+- `tests/` — automated tests
+- `DONEWARD_PRODUCT_PLAN.md` — product direction and roadmap
+
+## Deployment
+
+The app is configured for OpenAI Sites/Cloudflare through `.openai/hosting.json` and `vite.config.ts`. Run a clean production build before deploying. Do not commit local environment files or generated deployment state.
+
+## Status
+
+Doneward is an early prototype. Browser-local data is not yet synchronized across devices and should not be treated as a backup.
