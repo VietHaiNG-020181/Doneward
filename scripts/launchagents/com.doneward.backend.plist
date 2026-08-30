@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.doneward.backend</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/hainguyen/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3</string>
+    <string>/Users/hainguyen/Library/Application Support/Doneward/backend/server.py</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/hainguyen/Library/Application Support/Doneward/logs/backend.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/hainguyen/Library/Application Support/Doneward/logs/backend-error.log</string>
+</dict>
+</plist>

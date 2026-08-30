@@ -13,11 +13,13 @@ If private reporting is unavailable, contact the repository owner privately befo
 ## Security model
 
 - Planner data is stored in the user's browser through IndexedDB.
-- The optional browser extension is limited to the declared Doneward and ChatGPT origins.
-- Extension background messages are accepted only from the expected Doneward or ChatGPT tab.
-- Course-outline PDFs are temporarily stored in extension-local storage, cleared after result delivery, and expired after 24 hours if a job is abandoned.
+- Ollama and the extraction service bind only to loopback and must never be exposed through a public tunnel, router rule, or `0.0.0.0` binding.
+- Browser calls to the extraction service require both an exact allowlisted origin and a device-generated pairing token.
+- PDF uploads are not retained. The service validates the PDF signature and applies byte, page, request-rate, socket-timeout, and single-extraction limits before local model use.
 - Extracted content is treated as untrusted input and normalized against an allowlisted schema before import.
 - Users must review extracted tasks before they enter the planner.
+- Hosted responses deny framing and MIME sniffing, restrict referrers and browser permissions, and apply a restrictive Content Security Policy.
+- The retired ChatGPT extension remains only as archived source and is not part of the public web build.
 - Local `.env*` files and generated deployment state are ignored by Git.
 
 ## Operator checklist
@@ -27,13 +29,15 @@ Before publishing or deploying:
 1. Run `npm run lint` and `npm test`.
 2. Run a dependency vulnerability audit and review every production finding.
 3. Confirm `git status` does not include `.env` files, credentials, private course outlines, database files, or build output.
-4. Inspect changes to extension permissions and host access.
-5. Rebuild `public/doneward-chatgpt-bridge.zip` from the reviewed extension source.
+4. Confirm the backend allowlist contains only localhost and the exact intended hosted origin; never use `*`.
+5. Confirm ports `4317` and `11434` are reachable only through loopback.
 6. Use repository secret scanning and dependency update alerts where available.
+7. Deploy owner-only until application authentication and per-user server authorization are implemented.
 
 ## Known limitations
 
-- The browser extension automates the ChatGPT web interface and can break when that interface changes.
 - Browser-local storage is not an encrypted backup and is available to the local browser profile.
-- Localhost access in the development extension manifest is intentionally broad across localhost ports.
 - The prototype does not yet provide cross-device synchronization, account deletion, or server-side per-user authorization.
+- Code served by the trusted hosting origin necessarily runs with access to that origin's IndexedDB and pairing token. Hosting-account security and dependency integrity remain part of the trust boundary.
+- The CSP currently permits inline framework bootstrap scripts. Moving to per-response nonces is future defense in depth.
+- Pairing does not protect against malware already running as the same macOS user.

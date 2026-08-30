@@ -1,40 +1,28 @@
 "use client";
+/* eslint-disable @next/next/no-html-link-for-pages -- Vinext production navigation currently fails through next/link. */
 
-import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import { ChangeEvent, DragEvent, useEffect, useMemo, useState } from "react";
 import { ASSESSMENT_CATEGORIES, createAssessment, formatFileSize, normalizeGptExtraction, targetMinutesFor, type GptOutlineExtraction } from "@/lib/outline-import";
-import { loadOutlineDrafts, loadTasks, saveOutlineDrafts, saveTasks, type DraftAssessment, type DraftCourse, type Task } from "@/lib/doneward-store";
+import { loadBackendPairingToken, loadOutlineDrafts, loadTasks, saveBackendPairingToken, saveOutlineDrafts, saveTasks, type DraftAssessment, type DraftCourse, type Task } from "@/lib/doneward-store";
 
 type Notice = { tone: "success" | "error" | "info"; text: string } | null;
-type BridgeState = "checking" | "ready" | "missing";
+type BackendState = "checking" | "ready" | "unpaired" | "missing";
 type ImportState = { phase: "idle" | "sending" | "working" | "error"; text: string };
 type LegacyAssessment = Partial<DraftAssessment> & { title?: string; assessmentType?: DraftAssessment["category"] };
 type LegacyCourse = Partial<DraftCourse> & { courseCode?: string; assessments?: LegacyAssessment[] };
 
 const MAX_PDF_BYTES = 20 * 1024 * 1024;
-const BRIDGE_SOURCE = "doneward-chatgpt-bridge";
-const CHATGPT_PROMPT = `Read the attached course-outline PDF carefully, including every table and scanned page. Extract every actionable graded task the student must submit, complete, present, or sit for.
+const BACKEND_URL = "http://127.0.0.1:4317";
 
-Return ONLY valid JSON in this exact shape:
-{
-  "courseName": "Official course name",
-  "tasks": [
-    {
-      "taskName": "Exact task name from the outline",
-      "category": "assignment",
-      "deadline": "2026-09-25T23:59"
-    }
-  ]
+type LoopbackRequestInit = RequestInit & { targetAddressSpace?: "loopback" };
+
+function backendFetch(path: string, init: RequestInit = {}) {
+  const request = new Request(`${BACKEND_URL}${path}`, {
+    ...init,
+    targetAddressSpace: "loopback",
+  } as LoopbackRequestInit);
+  return fetch(request);
 }
-
-Rules:
-- Include only courseName, taskName, category, and deadline.
-- Never include the instructor name.
-- Allowed categories: assignment, quiz, test, exam, project, lab, paper, presentation, other.
-- Use YYYY-MM-DD or YYYY-MM-DDTHH:mm for deadlines.
-- Use null when a complete deadline is not stated. Never guess.
-- Do not turn policies, grading categories, office hours, schedule headings, or course topics into tasks.
-- Re-scan the entire PDF once for missed tasks before answering.`;
 
 function courseLabel(course: DraftCourse) {
   return course.courseName.trim() || "Untitled course";
@@ -64,23 +52,14 @@ function extractionToDraft(extraction: GptOutlineExtraction, fileName: string, f
   };
 }
 
-function readAsBase64(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
 export default function ImportTasksPage() {
   const [drafts, setDrafts] = useState<DraftCourse[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
-  const [bridge, setBridge] = useState<BridgeState>("checking");
+  const [backend, setBackend] = useState<BackendState>("checking");
+  const [pairingCode, setPairingCode] = useState("");
   const [importState, setImportState] = useState<ImportState>({ phase: "idle", text: "" });
-  const activeJob = useRef<string | null>(null);
 
   useEffect(() => {
     loadOutlineDrafts().then((saved) => {
@@ -91,64 +70,67 @@ export default function ImportTasksPage() {
 
   useEffect(() => { if (ready) saveOutlineDrafts(drafts).catch(() => undefined); }, [drafts, ready]);
 
-  useEffect(() => {
-    const onBridgeMessage = (event: MessageEvent) => {
-      if (event.source !== window || event.origin !== window.location.origin || event.data?.source !== BRIDGE_SOURCE) return;
-      if (event.data.type === "DONEWARD_BRIDGE_PONG") {
-        setBridge("ready");
-        if (event.data.activeStatus) setImportState({ phase: "working", text: String(event.data.activeStatus) });
-      }
-      if (event.data.type === "DONEWARD_CHATGPT_PROGRESS" && (!activeJob.current || event.data.jobId === activeJob.current)) {
-        activeJob.current = event.data.jobId;
-        setImportState({ phase: "working", text: String(event.data.message || "ChatGPT is reading the outline…") });
-      }
-      if (event.data.type === "DONEWARD_CHATGPT_ERROR" && (!activeJob.current || event.data.jobId === activeJob.current)) {
-        activeJob.current = null;
-        setImportState({ phase: "error", text: String(event.data.message || "The ChatGPT automation could not finish.") });
-      }
-      if (event.data.type === "DONEWARD_CHATGPT_RESULT" && (!activeJob.current || event.data.jobId === activeJob.current)) {
-        activeJob.current = null;
-        const extraction = normalizeGptExtraction(event.data.result);
-        if (!extraction?.courseName || !extraction.tasks.length) {
-          setImportState({ phase: "error", text: "ChatGPT returned an incomplete task list. Retry the PDF once." });
-          return;
-        }
-        const draft = extractionToDraft(extraction, String(event.data.fileName || "course-outline.pdf"), Number(event.data.fileSize || 0));
-        setDrafts((current) => [...current, draft]);
-        setSelectedId(draft.id);
-        setImportState({ phase: "idle", text: "" });
-        setNotice({ tone: "success", text: `${draft.assessments.length} task${draft.assessments.length === 1 ? "" : "s"} returned from ChatGPT. Review them before importing.` });
-      }
-    };
-    window.addEventListener("message", onBridgeMessage);
-    checkBridge();
-    const timeout = window.setTimeout(() => setBridge((value) => value === "checking" ? "missing" : value), 1200);
-    return () => { window.removeEventListener("message", onBridgeMessage); window.clearTimeout(timeout); };
-  }, []);
+  useEffect(() => { void checkBackend(); }, []);
 
   const selected = useMemo(() => drafts.find((draft) => draft.id === selectedId) ?? null, [drafts, selectedId]);
   const busy = importState.phase === "sending" || importState.phase === "working";
 
-  function checkBridge() {
-    setBridge("checking");
-    window.postMessage({ source: "doneward-app", type: "DONEWARD_BRIDGE_PING" }, window.location.origin);
-    window.setTimeout(() => setBridge((value) => value === "checking" ? "missing" : value), 1200);
+  async function checkBackend(candidateToken?: string) {
+    setBackend("checking");
+    try {
+      const token = candidateToken ?? await loadBackendPairingToken() ?? "";
+      const response = await backendFetch("/health", {
+        cache: "no-store",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (response.ok) {
+        if (candidateToken) await saveBackendPairingToken(candidateToken);
+        setPairingCode("");
+        setBackend("ready");
+      } else {
+        setBackend(response.status === 401 ? "unpaired" : "missing");
+      }
+    } catch {
+      setBackend("missing");
+    }
+  }
+
+  async function pairBackend() {
+    const token = pairingCode.trim();
+    if (!/^[A-Za-z0-9_-]{32,128}$/.test(token)) {
+      setNotice({ tone: "error", text: "Paste the complete pairing code shown by the local backend." });
+      return;
+    }
+    await checkBackend(token);
   }
 
   async function startAutomation(file: File) {
-    if (bridge !== "ready") { setNotice({ tone: "error", text: "Install or enable the Doneward ChatGPT Bridge in Chrome first." }); return; }
+    if (backend !== "ready") { setNotice({ tone: "error", text: "Start the Doneward local backend on this Mac first." }); return; }
     if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) { setNotice({ tone: "error", text: "Choose a PDF course outline." }); return; }
     if (!file.size || file.size > MAX_PDF_BYTES) { setNotice({ tone: "error", text: "Choose a PDF smaller than 20 MB." }); return; }
-    const jobId = crypto.randomUUID();
-    activeJob.current = jobId;
     setNotice(null);
-    setImportState({ phase: "sending", text: "Passing the PDF to your private browser extension…" });
+    setImportState({ phase: "sending", text: "Sending the PDF to the private backend on this Mac…" });
     try {
-      const fileBase64 = await readAsBase64(file);
-      window.postMessage({ source: "doneward-app", type: "DONEWARD_CHATGPT_START", jobId, fileName: file.name, fileSize: file.size, fileType: file.type || "application/pdf", fileBase64, prompt: CHATGPT_PROMPT }, window.location.origin);
-    } catch {
-      activeJob.current = null;
-      setImportState({ phase: "error", text: "Doneward could not read this PDF. Choose the file again." });
+      const token = await loadBackendPairingToken();
+      if (!token) { setBackend("unpaired"); throw new Error("Pair this browser with the Doneward backend first."); }
+      setImportState({ phase: "working", text: "Extracting the outline with the local model. This can take a few minutes." });
+      const response = await backendFetch("/extract", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/pdf", "X-File-Name": encodeURIComponent(file.name) },
+        body: file,
+      });
+      const result = await response.json() as { extraction?: unknown; error?: string };
+      if (response.status === 401) setBackend("unpaired");
+      if (!response.ok) throw new Error(result.error || "The local extraction could not finish.");
+      const extraction = normalizeGptExtraction(result.extraction);
+      if (!extraction?.courseName || !extraction.tasks.length) throw new Error("The local model returned an incomplete task list. Review the PDF and retry once.");
+      const draft = extractionToDraft(extraction, file.name, file.size);
+      setDrafts((current) => [...current, draft]);
+      setSelectedId(draft.id);
+      setImportState({ phase: "idle", text: "" });
+      setNotice({ tone: "success", text: `${draft.assessments.length} task${draft.assessments.length === 1 ? "" : "s"} extracted locally. Review them before importing.` });
+    } catch (error) {
+      setImportState({ phase: "error", text: error instanceof Error ? error.message : "Doneward could not process this PDF." });
     }
   }
 
@@ -170,10 +152,10 @@ export default function ImportTasksPage() {
     const existing = new Set(saved.map((task) => taskKey(task.course ?? "", task.title, task.deadline)));
     const now = Date.now();
     const imported: Task[] = scheduled.filter((item) => !existing.has(taskKey(selected.courseName, item.taskName, item.deadline))).map((item, index) => ({
-      id: crypto.randomUUID(), title: item.taskName.trim(), notes: "Imported through the personal ChatGPT bridge", deadline: item.deadline,
+      id: crypto.randomUUID(), title: item.taskName.trim(), notes: "Imported through the private local outline extractor", deadline: item.deadline,
       targetMinutes: targetMinutesFor(item.category), focusedSeconds: 0, importance: "Unprioritized", reminderMinutes: 60,
       nextReminderAt: now + 60 * 60000, completed: false, createdAt: now + index, source: "outline",
-      sourceUid: `bridge:${taskKey(selected.courseName, item.taskName, item.deadline)}`, course: selected.courseName.trim(),
+      sourceUid: `local:${taskKey(selected.courseName, item.taskName, item.deadline)}`, course: selected.courseName.trim(),
       assessmentType: item.category, originalDeadline: item.deadline,
     }));
     await saveTasks([...saved, ...imported]);
@@ -186,28 +168,28 @@ export default function ImportTasksPage() {
 
   return <main className="import-app">
     <aside className="import-sidebar">
-      <Link className="brand" href="/"><span className="brand-mark">D</span><span>Doneward</span></Link>
-      <nav aria-label="Main navigation"><Link className="nav-item" href="/"><span>◈</span> Today</Link><Link className="nav-item" href="/"><span>○</span> All tasks</Link><Link className="nav-item active" href="/import-tasks"><span>↳</span> Import tasks</Link></nav>
-      <div className="import-note"><span>◇</span><p><strong>Personal automation</strong>The extension works only in your browser. Doneward never receives your ChatGPT login or cookies.</p></div>
+      <a className="brand" href="/"><span className="brand-mark">D</span><span>Doneward</span></a>
+      <nav aria-label="Main navigation"><a className="nav-item" href="/"><span>◈</span> Today</a><a className="nav-item" href="/"><span>○</span> All tasks</a><a className="nav-item active" href="/import-tasks"><span>↳</span> Import tasks</a></nav>
+      <div className="import-note"><span>◇</span><p><strong>Private local AI</strong>The outline stays on this Mac and is processed without an API key or browser extension.</p></div>
     </aside>
 
     <section className="import-workspace">
-      <header className="import-header"><div><p className="eyebrow">PERSONAL CHATGPT BRIDGE</p><h1>Import a course outline</h1><p>Upload once in Doneward. Your browser extension opens ChatGPT, applies the extraction rules, and brings the JSON back for review.</p></div>{bridge === "ready" && <span className="bridge-badge"><i /> Extension connected</span>}</header>
+      <header className="import-header"><div><p className="eyebrow">PRIVATE LOCAL EXTRACTION</p><h1>Import a course outline</h1><p>Upload once in Doneward. The backend on this Mac reads the PDF and returns a private draft for review.</p></div>{backend === "ready" && <span className="bridge-badge"><i /> Local backend ready</span>}</header>
       {notice && <div className={`import-notice ${notice.tone}`} role="status"><span>{notice.tone === "success" ? "✓" : notice.tone === "error" ? "!" : "i"}</span>{notice.text}<button onClick={() => setNotice(null)} aria-label="Dismiss">×</button></div>}
 
-      {bridge !== "ready" ? <section className="bridge-setup">
-        <div className="bridge-setup-mark">D↔C</div>
-        <div><p className="eyebrow">ONE-TIME SETUP</p><h2>Connect Doneward to ChatGPT</h2><p>This personal Chrome/Edge extension performs the upload and copy-back steps in your own signed-in browser. It does not access your password or session cookies.</p></div>
-        <ol><li><b>1</b><span><strong>Download the extension</strong><small>Save and unzip the Doneward ChatGPT Bridge.</small></span></li><li><b>2</b><span><strong>Load it in Chrome or Edge</strong><small>Open Extensions, enable Developer mode, then choose Load unpacked.</small></span></li><li><b>3</b><span><strong>Sign in to ChatGPT</strong><small>Keep your normal ChatGPT account signed in, then return here.</small></span></li></ol>
-        <div className="bridge-setup-actions"><a className="primary-button" href="/doneward-chatgpt-bridge.zip" download>Download extension</a><a className="secondary-button" href="https://chatgpt.com/" target="_blank" rel="noreferrer">Open ChatGPT</a><button className="secondary-button" onClick={checkBridge}>{bridge === "checking" ? "Checking…" : "I installed it · Check again"}</button></div>
-        <p className="bridge-limit">Prototype note: because this operates the ChatGPT interface, a future ChatGPT redesign may require an extension update.</p>
+      {backend !== "ready" ? <section className="bridge-setup">
+        <div className="bridge-setup-mark">D↔AI</div>
+        <div><p className="eyebrow">LOCAL SERVICE</p><h2>{backend === "checking" ? "Checking the private backend" : backend === "unpaired" ? "Pair this browser" : "The private backend is offline"}</h2><p>{backend === "unpaired" ? "A one-device code prevents other websites from controlling the AI service on this Mac." : "Doneward uses Ollama on this Mac. No PDF, login, or task data is sent to an external AI provider."}</p></div>
+        <ol><li><b>1</b><span><strong>Ollama runs locally</strong><small>The model stays on this Mac.</small></span></li><li><b>2</b><span><strong>PDF text is temporary</strong><small>It is processed in memory and not retained.</small></span></li><li><b>3</b><span><strong>You remain in control</strong><small>Every extracted deadline still requires review.</small></span></li></ol>
+        {backend === "unpaired" ? <div className="bridge-setup-actions pair-actions"><a className="secondary-button" href={`${BACKEND_URL}/pair`} target="_blank" rel="noreferrer">Open pairing code</a><label><span>Pairing code</span><input type="password" autoComplete="off" value={pairingCode} onChange={(event) => setPairingCode(event.target.value)} placeholder="Paste the code from the local page" /></label><button className="primary-button" onClick={pairBackend}>Pair securely</button></div> : <div className="bridge-setup-actions"><button className="primary-button" onClick={() => void checkBackend()}>{backend === "checking" ? "Checking…" : "Check backend again"}</button></div>}
+        <p className="bridge-limit">The local service must be running and paired on this Mac before an outline can be imported.</p>
       </section> : <>
         <label className={`automation-drop ${busy ? "busy" : ""}`} onDrop={onDrop} onDragOver={(event) => event.preventDefault()}>
           <input type="file" accept="application/pdf,.pdf" onChange={onFiles} disabled={busy} />
-          {busy ? <><span className="automation-spinner" /><h2>{importState.phase === "sending" ? "Preparing your outline" : "ChatGPT is working"}</h2><p>{importState.text}</p><strong>Keep this page open. The ChatGPT tab can stay in the background.</strong></> : <><span>↑</span><h2>Drop your course-outline PDF here</h2><p>One PDF at a time, up to 20 MB.</p><strong>Browse PDF files</strong></>}
+          {busy ? <><span className="automation-spinner" /><h2>{importState.phase === "sending" ? "Preparing your outline" : "Local AI is working"}</h2><p>{importState.text}</p><strong>Keep this page open until the review draft appears.</strong></> : <><span>↑</span><h2>Drop your course-outline PDF here</h2><p>One PDF at a time, up to 20 MB.</p><strong>Browse PDF files</strong></>}
         </label>
         {importState.phase === "error" && <div className="automation-error"><span>!</span><div><strong>The automatic import stopped</strong><p>{importState.text}</p></div><button className="secondary-button" onClick={() => setImportState({ phase: "idle", text: "" })}>Try another PDF</button></div>}
-        <section className="automation-steps"><div><b>1</b><span><strong>You upload here</strong><small>The PDF is handed directly to your extension.</small></span></div><div><b>2</b><span><strong>ChatGPT extracts</strong><small>A background tab applies Doneward’s fixed rules.</small></span></div><div><b>3</b><span><strong>You review</strong><small>Only the four requested fields return to Doneward.</small></span></div></section>
+        <section className="automation-steps"><div><b>1</b><span><strong>You upload here</strong><small>The PDF goes only to this Mac.</small></span></div><div><b>2</b><span><strong>Local AI extracts</strong><small>Ollama applies Doneward’s fixed rules.</small></span></div><div><b>3</b><span><strong>You review</strong><small>Only the four requested fields return to Doneward.</small></span></div></section>
       </>}
 
       <section className="import-intro"><div><strong>{drafts.length}</strong><span>courses to review</span></div><p><strong>Review stays mandatory:</strong> check the course name, task name, category, and deadline before adding anything to your plan.</p></section>
@@ -217,10 +199,10 @@ export default function ImportTasksPage() {
         <section className="review-panel">
           <div className="review-panel-head"><div><p className="eyebrow">REVIEW DRAFT</p><h2>{courseLabel(selected)}</h2><span>{selected.fileName} · {formatFileSize(selected.fileSize)}</span></div><button className="delete-button" onClick={removeCourse}>Remove draft</button></div>
           <div className="course-fields course-fields-simple"><label>Course name<input value={selected.courseName} onChange={(event) => updateCourse({ courseName: event.target.value })} placeholder="e.g. Software Engineering" /></label></div>
-          <div className="extraction-state success"><span>✓</span><div><strong>{selected.assessments.length} task{selected.assessments.length === 1 ? "" : "s"} returned from ChatGPT</strong><p>Review the four requested fields below, then import the confirmed deadlines.</p></div></div>
+          <div className="extraction-state success"><span>✓</span><div><strong>{selected.assessments.length} task{selected.assessments.length === 1 ? "" : "s"} extracted locally</strong><p>Review the four requested fields below, then import the confirmed deadlines.</p></div></div>
           <div className="assessment-heading"><div><h3>Course tasks</h3><p>Unknown deadlines stay blank until you fill them in.</p></div><button className="secondary-button" onClick={() => updateCourse({ assessments: [...selected.assessments, createAssessment()] })}>+ Add task</button></div>
           <div className="assessment-list">{selected.assessments.length === 0 ? <div className="assessment-empty">No tasks were returned. Add one manually or retry the outline.</div> : selected.assessments.map((item, index) => <article className="assessment-row assessment-row-simple" key={item.id}><div className="assessment-number">{index + 1}</div><label>Task name<input value={item.taskName} onChange={(event) => updateAssessment(item.id, { taskName: event.target.value })} placeholder="e.g. Assignment 1" /></label><label>Category<select value={item.category} onChange={(event) => updateAssessment(item.id, { category: event.target.value as DraftAssessment["category"] })}>{ASSESSMENT_CATEGORIES.map((category) => <option value={category} key={category}>{category[0].toUpperCase() + category.slice(1)}</option>)}</select></label><label>Deadline<input value={item.deadline} onChange={(event) => updateAssessment(item.id, { deadline: event.target.value })} placeholder="YYYY-MM-DD or date + time" /></label><button className="remove-assessment" onClick={() => removeAssessment(item.id)} aria-label={`Remove task ${index + 1}`}>×</button></article>)}</div>
-          <footer className="review-footer"><p>Imported tasks start as <strong>Unprioritized</strong>, and Doneward orders them by urgency and nearest deadline.</p><div><Link className="secondary-button" href="/">Cancel</Link><button className="primary-button" onClick={confirmCourse}>Import tasks</button></div></footer>
+          <footer className="review-footer"><p>Imported tasks start as <strong>Unprioritized</strong>, and Doneward orders them by urgency and nearest deadline.</p><div><a className="secondary-button" href="/">Cancel</a><button className="primary-button" onClick={confirmCourse}>Import tasks</button></div></footer>
         </section>
       </div>}
     </section>

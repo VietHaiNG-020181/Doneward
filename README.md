@@ -2,7 +2,7 @@
 
 Doneward is a privacy-minded academic task planner. It helps students turn course-outline deadlines into a reviewed semester plan, choose work for today, and stay focused with task timers.
 
-The current prototype runs as a responsive web app and stores planner data in the browser. Course-outline extraction is performed through an optional personal Chrome/Edge extension that uses the user's already signed-in ChatGPT tab. Review is mandatory before extracted tasks are added.
+The current prototype runs as a responsive web app and stores planner data in the browser. Course-outline extraction is performed by a private Ollama backend on the same Mac. Review is mandatory before extracted tasks are added.
 
 ## Current features
 
@@ -10,14 +10,15 @@ The current prototype runs as a responsive web app and stores planner data in th
 - Manual priority, deadline, course, and focus-duration controls
 - Persistent browser storage through IndexedDB
 - PDF course-outline import with structured review
-- Optional personal ChatGPT bridge for PDF extraction
-- Installable PWA shell and offline fallback
+- Private local Ollama extraction for text-based PDFs
+- Installable web-app metadata and local browser persistence
 
 ## Requirements
 
 - Node.js 22.13 or newer
 - npm
-- Chrome or Edge for the optional course-outline bridge
+- Ollama with `qwen3:4b-instruct-2507-q4_K_M`
+- Python 3 with `pypdf`
 
 ## Local development
 
@@ -37,25 +38,24 @@ npm test
 
 `npm test` performs a production build before running the Node test suite.
 
-## Course-outline bridge
+## Local course-outline extraction
 
-The optional extension lives in `doneward-chatgpt-bridge/`. To load it locally:
+Run the private local services before using **Import tasks**:
 
-1. Open `chrome://extensions` or `edge://extensions`.
-2. Enable Developer mode.
-3. Select **Load unpacked** and choose `doneward-chatgpt-bridge/`.
-4. Sign in to ChatGPT in the same browser.
-5. Return to Doneward and use **Import tasks**.
+```bash
+./scripts/start-local-services.sh
+```
 
-The extension is restricted to the Doneward production origin, localhost development pages, and `chatgpt.com`. It does not request cookie access or read passwords. During an import, the selected PDF is temporarily stored in extension-local storage, sent to the created ChatGPT tab, and removed from storage after delivery. Stale jobs are deleted after 24 hours.
+The backend listens only on `127.0.0.1:4317`, accepts requests only from exact allowlisted Doneward origins, and requires a device-generated pairing token. On first use, open the pairing page from **Import tasks**, copy the one-device code, and save it in Doneward. The backend validates the PDF signature, enforces size, page, rate, and concurrency limits, extracts text in memory, and sends that text to Ollama on `127.0.0.1:11434`. It does not use an API key or retain the uploaded PDF. Scanned image-only PDFs currently require OCR before import.
 
-Because this prototype automates ChatGPT's web interface, interface changes can require an extension update. Always review the returned course name, task names, categories, and deadlines before importing.
+Always review the returned course name, task names, categories, and deadlines before importing.
 
 ## Data and privacy
 
 - Planner tasks and import drafts stay in the browser's IndexedDB in the current prototype.
-- PDFs pass directly from the Doneward page to the local extension; the Doneward server does not receive them.
-- The extension can interact only with the origins declared in its manifest.
+- PDFs are processed in memory by the localhost backend and are not retained.
+- The backend and Ollama bind only to the loopback interface.
+- The pairing token is generated on the Mac with owner-only file permissions and stored by the paired browser in IndexedDB.
 - `.env*`, build output, local Cloudflare state, and dependencies are excluded from Git.
 
 See [SECURITY.md](SECURITY.md) for reporting and operational guidance and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the system design and trust boundaries.
@@ -65,7 +65,9 @@ See [SECURITY.md](SECURITY.md) for reporting and operational guidance and [docs/
 - `app/` — application routes and interface
 - `lib/` — browser persistence and import normalization
 - `worker/` — Cloudflare Worker entry point
-- `doneward-chatgpt-bridge/` — optional browser extension source
+- `backend/` — private localhost PDF and Ollama extraction service
+- `scripts/start-local-services.sh` — local service launcher
+- `doneward-chatgpt-bridge/` — archived, non-public extension prototype
 - `tests/` — automated tests
 - `DONEWARD_PRODUCT_PLAN.md` — product direction and roadmap
 

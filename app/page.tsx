@@ -98,7 +98,6 @@ export default function Home() {
 
   useEffect(() => {
     loadTasks().then((saved) => setTasks(saved?.length ? saved : starterTasks())).finally(() => setReady(true));
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     const clockId = window.setInterval(() => setClock(Date.now()), 60000);
     return () => window.clearInterval(clockId);
   }, []);

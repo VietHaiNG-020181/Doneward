@@ -3,6 +3,8 @@ import { headers } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
+const PRODUCTION_ORIGIN = "https://doneward-focus.hyperwarev.chatgpt.site";
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -16,8 +18,7 @@ const geistMono = Geist_Mono({
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
   const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "localhost:3000";
-  const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  const origin = `${protocol}://${host}`;
+  const origin = host === "localhost:3000" || host === "127.0.0.1:3000" ? `http://${host}` : PRODUCTION_ORIGIN;
   const title = "Doneward — Focus on what matters next";
   const description = "A gentle, persistent task planner that turns deadlines into focused action.";
   const image = `${origin}/og.png`;

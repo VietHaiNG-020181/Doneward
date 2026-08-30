@@ -36,3 +36,5 @@ export const loadTasks = () => getValue<Task[]>("tasks");
 export const saveTasks = (tasks: Task[]) => putValue("tasks", tasks);
 export const loadOutlineDrafts = () => getValue<DraftCourse[]>("outline-drafts");
 export const saveOutlineDrafts = (drafts: DraftCourse[]) => putValue("outline-drafts", drafts);
+export const loadBackendPairingToken = () => getValue<string>("backend-pairing-token");
+export const saveBackendPairingToken = (token: string) => putValue("backend-pairing-token", token);
