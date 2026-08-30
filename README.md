@@ -48,6 +48,8 @@ Run the private local services before using **Import tasks**:
 
 The backend listens only on `127.0.0.1:4317`, accepts requests only from exact allowlisted Doneward origins, and requires a device-generated pairing token. On first use, open the pairing page from **Import tasks**, copy the one-device code, and save it in Doneward. The backend validates the PDF signature, enforces size, page, rate, and concurrency limits, extracts text in memory, and sends that text to Ollama on `127.0.0.1:11434`. It does not use an API key or retain the uploaded PDF. Scanned image-only PDFs currently require OCR before import.
 
+The installed Mac service allowlists the local app and the private production origin. If the hosted domain changes, update `DONEWARD_ALLOWED_ORIGINS` to the new exact HTTPS origin before using imports there.
+
 Always review the returned course name, task names, categories, and deadlines before importing.
 
 ## Data and privacy

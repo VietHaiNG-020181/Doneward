@@ -9,6 +9,11 @@
     <string>/Users/hainguyen/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3</string>
     <string>/Users/hainguyen/Library/Application Support/Doneward/backend/server.py</string>
   </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>DONEWARD_ALLOWED_ORIGINS</key>
+    <string>http://localhost:3000,http://127.0.0.1:3000,https://doneward-focus.hyperwarev.chatgpt.site</string>
+  </dict>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
