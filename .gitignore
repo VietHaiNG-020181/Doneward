@@ -40,3 +40,8 @@ yarn-error.log*
 /.wrangler/
 /outputs/
 /work/
+/.local/
+/.ollama-models/
+/tmp/
+__pycache__/
+*.pyc

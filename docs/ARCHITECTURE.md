@@ -6,7 +6,7 @@ Doneward currently has three cooperating pieces:
 
 1. A vinext/React web application renders the planner and import review interface.
 2. IndexedDB stores tasks and unconfirmed course drafts in the local browser profile.
-3. An optional Manifest V3 browser extension transfers a selected PDF to a dedicated ChatGPT tab and returns normalized task data to the review interface.
+3. A private localhost backend extracts PDF text and asks a local Ollama model for structured task data.
 
 ## Data flow
 
@@ -17,22 +17,23 @@ The interface calls `lib/doneward-store.ts`, which reads and writes the `donewar
 ### Course-outline import
 
 1. The user selects one PDF, limited to 20 MB.
-2. The web app validates the type and size, reads it as base64, and posts a same-origin window message.
-3. The Doneward content script validates the message and stores a temporary job in extension-local storage.
-4. The background worker creates a non-active `chatgpt.com` tab and binds the job to that tab ID.
-5. The ChatGPT content script uploads the PDF, submits a fixed extraction prompt, and parses the response.
-6. The background worker accepts progress or results only from the bound ChatGPT tab.
-7. The Doneward page normalizes the result against allowlisted assessment categories and date formats.
-8. The user reviews and edits the draft before confirming it into planner storage.
-9. The extension removes the PDF payload after completion; abandoned jobs expire after 24 hours.
+2. The web app sends the PDF body to the backend bound to `127.0.0.1:4317`.
+3. The backend validates an exact origin allowlist and a per-device bearer token.
+4. It validates the PDF signature, content type, 20 MB size, and 200-page limit, then applies extraction rate and concurrency limits.
+5. PDF text is extracted in memory with `pypdf`; the original bytes are not retained.
+6. The extracted text is sent to Ollama on `127.0.0.1:11434` with a strict JSON schema.
+7. The backend validates course, category, task-name, and deadline fields before returning them.
+8. The Doneward page normalizes the result again against allowlisted categories and date formats.
+9. The user reviews and edits the draft before confirming it into planner storage.
 
 ## Trust boundaries
 
-- Window messages are accepted only from the same window and origin and must include the expected source marker.
-- Extension messages are checked against the extension ID, sender origin, and expected tab ID.
-- ChatGPT output is untrusted. Only the expected object shape, known categories, task names, and strict date formats are retained.
-- The extension requests access only to the Doneward production site, localhost development pages, and `chatgpt.com`.
+- The backend accepts browser requests only from exact allowlisted Doneward origins with a constant-time checked pairing token.
+- Both the backend and Ollama bind to the loopback interface and are not exposed to the network.
+- Local-model output is untrusted. Only the expected object shape, known categories, task names, and strict date formats are retained.
 - The application never asks for or reads ChatGPT passwords, session cookies, or API keys.
+- Hosted responses set CSP, anti-framing, MIME-sniffing, referrer, browser-permission, and HTTPS transport headers.
+- The obsolete extension download and cache-all service worker are no longer publicly served.
 
 ## Runtime and deployment
 
@@ -42,6 +43,6 @@ The production build uses vinext and a Cloudflare Worker entry point. `.openai/h
 
 - Add authenticated server persistence and per-user authorization for cross-device sync.
 - Define document retention and deletion controls before server-side PDF storage.
-- Add rate limits, CSRF protection, and audit logging to future write APIs.
-- Add content-security and platform response headers after verifying compatibility with the selected hosting runtime.
-- Replace browser UI automation with a stable supported integration when one is available.
+- Replace the transitional inline-script CSP allowance with nonces when the hosting runtime supports them end to end.
+- Add structured local audit events without document text or task contents.
+- Add OCR for scanned image-only PDFs.
