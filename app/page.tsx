@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { loadTasks, saveTasks, type Importance, type Task } from "@/lib/doneward-store";
+import { loadTasks, rememberTaskDeletion, saveTasks, type Importance, type Task } from "@/lib/doneward-store";
+import { synchronizeTasks, type TaskSyncStatus } from "@/lib/task-sync";
 
 type View = "today" | "all" | "upcoming" | "history";
 
@@ -20,16 +21,6 @@ function dateAt(days: number, hour: number, minute = 0) {
 
 function deadlineDate(value: string | number) {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T23:59:59`) : new Date(value);
-}
-
-function starterTasks(): Task[] {
-  const now = Date.now();
-  return [
-    { id: crypto.randomUUID(), title: "Build project landing page", notes: "Finish the hero, feature section, and responsive polish.", deadline: dateAt(0, 16), targetMinutes: 120, focusedSeconds: 35 * 60, importance: "High", reminderMinutes: 30, nextReminderAt: now + 30 * 60000, completed: false, createdAt: now },
-    { id: crypto.randomUUID(), title: "Review weekly budget", notes: "Check subscriptions and categorize recent purchases.", deadline: dateAt(0, 19, 30), targetMinutes: 30, focusedSeconds: 0, importance: "Medium", reminderMinutes: 60, nextReminderAt: now + 60 * 60000, completed: false, createdAt: now + 1 },
-    { id: crypto.randomUUID(), title: "Prepare client proposal", notes: "Outline, pricing, and delivery timeline.", deadline: dateAt(1, 11), targetMinutes: 180, focusedSeconds: 0, importance: "High", reminderMinutes: 30, nextReminderAt: now + 90 * 60000, completed: false, createdAt: now + 2 },
-    { id: crypto.randomUUID(), title: "Plan next week", notes: "Choose the three outcomes that matter most.", deadline: dateAt(4, 17), targetMinutes: 25, focusedSeconds: 25 * 60, importance: "Low", reminderMinutes: 60, nextReminderAt: now + 120 * 60000, completed: true, completedAt: now - 86400000, createdAt: now - 172800000 },
-  ];
 }
 
 function urgency(task: Task) {
@@ -67,6 +58,24 @@ function formatDuration(minutes: number) {
   return hours ? `${hours}h${mins ? ` ${mins}m` : ""}` : `${mins}m`;
 }
 
+function sameTasks(left: Task[], right: Task[]) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function mergeSyncedTasks(current: Task[], remote: Task[], deleted: Array<{ id: string; deletedAt: number }>) {
+  const deletionMap = new Map(deleted.map((item) => [item.id, item.deletedAt]));
+  const merged = new Map(remote.map((task) => [task.id, task]));
+  for (const task of current) {
+    if ((deletionMap.get(task.id) ?? 0) >= task.updatedAt) {
+      merged.delete(task.id);
+      continue;
+    }
+    const remoteTask = merged.get(task.id);
+    if (!remoteTask || task.updatedAt > remoteTask.updatedAt) merged.set(task.id, task);
+  }
+  return [...merged.values()].sort((left, right) => left.createdAt - right.createdAt || left.id.localeCompare(right.id));
+}
+
 function deadlineLabel(value: string) {
   const date = deadlineDate(value);
   const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -91,23 +100,65 @@ export default function Home() {
   const [editing, setEditing] = useState<Task | null | "new">(null);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
-  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(() => typeof Notification === "undefined" ? "default" : Notification.permission);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>("default");
   const [showReminderPrompt, setShowReminderPrompt] = useState(true);
-  const [clock, setClock] = useState(Date.now);
+  const [clock, setClock] = useState(0);
+  const [syncStatus, setSyncStatus] = useState<TaskSyncStatus | "loading" | "syncing" | "error">("loading");
   const tickRef = useRef<number | null>(null);
+  const syncRef = useRef<number | null>(null);
 
   useEffect(() => {
-    loadTasks().then((saved) => setTasks(saved?.length ? saved : starterTasks())).finally(() => setReady(true));
+    let active = true;
+    loadTasks().then(async (saved) => {
+      const localTasks = saved ?? [];
+      if (!active) return;
+      setTasks(localTasks);
+      setReady(true);
+      setSyncStatus("syncing");
+      try {
+        const result = await synchronizeTasks(localTasks);
+        if (!active) return;
+        setTasks((current) => {
+          const merged = mergeSyncedTasks(current, result.tasks, result.deleted);
+          return sameTasks(current, merged) ? current : merged;
+        });
+        setSyncStatus(result.status);
+      } catch {
+        if (active) setSyncStatus("error");
+      }
+    });
+    const frameId = window.requestAnimationFrame(() => {
+      setClock(Date.now());
+      if ("Notification" in window) setNotificationPermission(Notification.permission);
+    });
     const clockId = window.setInterval(() => setClock(Date.now()), 60000);
-    return () => window.clearInterval(clockId);
+    return () => { active = false; window.cancelAnimationFrame(frameId); window.clearInterval(clockId); };
   }, []);
 
-  useEffect(() => { if (ready) saveTasks(tasks).catch(() => undefined); }, [tasks, ready]);
+  useEffect(() => {
+    if (!ready) return;
+    void saveTasks(tasks).catch(() => undefined);
+    if (syncRef.current) window.clearTimeout(syncRef.current);
+    syncRef.current = window.setTimeout(async () => {
+      setSyncStatus("syncing");
+      try {
+        const result = await synchronizeTasks(tasks);
+        setTasks((current) => {
+          const merged = mergeSyncedTasks(current, result.tasks, result.deleted);
+          return sameTasks(current, merged) ? current : merged;
+        });
+        setSyncStatus(result.status);
+      } catch {
+        setSyncStatus("error");
+      }
+    }, 2_500);
+    return () => { if (syncRef.current) window.clearTimeout(syncRef.current); };
+  }, [tasks, ready]);
 
   useEffect(() => {
     if (!running || !focusId) return;
     tickRef.current = window.setInterval(() => {
-      setTasks((current) => current.map((task) => task.id === focusId ? { ...task, focusedSeconds: task.focusedSeconds + 1 } : task));
+      setTasks((current) => current.map((task) => task.id === focusId ? { ...task, focusedSeconds: task.focusedSeconds + 1, updatedAt: Date.now() } : task));
     }, 1000);
     return () => { if (tickRef.current) clearInterval(tickRef.current); };
   }, [running, focusId]);
@@ -124,7 +175,7 @@ export default function Home() {
       setTasks((current) => current.map((task) => {
         if (task.completed || task.nextReminderAt > now) return task;
         notify(task);
-        return { ...task, nextReminderAt: now + task.reminderMinutes * 60000 };
+        return { ...task, nextReminderAt: now + task.reminderMinutes * 60000, updatedAt: now };
       }));
     };
     check();
@@ -141,31 +192,43 @@ export default function Home() {
   const visibleTasks = view === "today" ? todayTasks : view === "upcoming" ? upcomingTasks : view === "history" ? completed : activeTasks;
   const focusTask = tasks.find((task) => task.id === focusId);
   const remainingToday = todayTasks.reduce((sum, task) => sum + Math.max(0, task.targetMinutes - task.focusedSeconds / 60), 0);
+  const currentDate = clock ? new Date(clock) : null;
 
   function saveTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const existing = editing !== "new" ? editing : null;
     const reminderMinutes = Number(form.get("reminderMinutes"));
+    const now = Date.now();
     const task: Task = {
       id: existing?.id ?? crypto.randomUUID(), title: String(form.get("title")).trim(), notes: String(form.get("notes")).trim(),
       deadline: String(form.get("deadline")), targetMinutes: Number(form.get("targetMinutes")), focusedSeconds: existing?.focusedSeconds ?? 0,
-      importance: form.get("importance") as Importance, reminderMinutes, nextReminderAt: Date.now() + reminderMinutes * 60000,
-      completed: existing?.completed ?? false, completedAt: existing?.completedAt, createdAt: existing?.createdAt ?? Date.now(),
+      importance: form.get("importance") as Importance, reminderMinutes, nextReminderAt: now + reminderMinutes * 60000,
+      completed: existing?.completed ?? false, completedAt: existing?.completedAt, createdAt: existing?.createdAt ?? now,
       source: existing?.source ?? "manual", sourceUid: existing?.sourceUid, course: existing?.course, assessmentType: existing?.assessmentType, originalDeadline: existing?.originalDeadline,
       plannedDate: existing?.plannedDate ?? (view === "today" ? currentDay : undefined),
+      updatedAt: now,
     };
     setTasks((current) => existing ? current.map((item) => item.id === task.id ? task : item) : [...current, task]);
     setEditing(null);
   }
 
   function toggleComplete(task: Task) {
-    setTasks((current) => current.map((item) => item.id === task.id ? { ...item, completed: !item.completed, completedAt: !item.completed ? Date.now() : undefined } : item));
+    const now = Date.now();
+    setTasks((current) => current.map((item) => item.id === task.id ? { ...item, completed: !item.completed, completedAt: !item.completed ? now : undefined, updatedAt: now } : item));
     if (focusId === task.id) { setRunning(false); setFocusId(null); }
   }
 
   function toggleToday(task: Task) {
-    setTasks((current) => current.map((item) => item.id === task.id ? { ...item, plannedDate: item.plannedDate === currentDay ? undefined : currentDay } : item));
+    const now = Date.now();
+    setTasks((current) => current.map((item) => item.id === task.id ? { ...item, plannedDate: item.plannedDate === currentDay ? undefined : currentDay, updatedAt: now } : item));
+  }
+
+  async function deleteTask(task: Task) {
+    const deletedAt = Date.now();
+    await rememberTaskDeletion(task.id, deletedAt);
+    setTasks((current) => current.filter((item) => item.id !== task.id));
+    setEditing(null);
   }
 
   async function enableNotifications() {
@@ -195,8 +258,8 @@ export default function Home() {
 
       <section className="workspace">
         <header className="topbar">
-          <div><p className="eyebrow">{new Date(clock).toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" }).toUpperCase()}</p><h1>{new Date(clock).getHours() < 12 ? "Good morning." : new Date(clock).getHours() < 18 ? "Good afternoon." : "Good evening."}</h1><p>One clear step at a time.</p></div>
-          <button className="primary-button" onClick={() => setEditing("new")}>+ Add task</button>
+          <div><p className="eyebrow">{currentDate ? currentDate.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" }).toUpperCase() : "YOUR PLAN"}</p><h1>{currentDate ? currentDate.getHours() < 12 ? "Good morning." : currentDate.getHours() < 18 ? "Good afternoon." : "Good evening." : "Welcome back."}</h1><p>One clear step at a time.</p></div>
+          <div className="topbar-actions"><span className={`sync-badge ${syncStatus}`}><i />{syncStatus === "cloud" ? "Saved to cloud" : syncStatus === "local" ? "Saved on this device" : syncStatus === "error" ? "Cloud unavailable · saved locally" : "Saving…"}</span><button className="primary-button" onClick={() => setEditing("new")}>+ Add task</button></div>
         </header>
 
         {nextTask ? <section className="next-card">
@@ -217,7 +280,7 @@ export default function Home() {
         </section>
       </section>
 
-      {editing && <TaskModal task={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} onSave={saveTask} onDelete={editing === "new" ? undefined : () => { setTasks((current) => current.filter((task) => task.id !== editing.id)); setEditing(null); }} />}
+      {editing && <TaskModal task={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} onSave={saveTask} onDelete={editing === "new" ? undefined : () => void deleteTask(editing)} />}
       {focusTask && <FocusModal task={focusTask} running={running} onToggle={() => setRunning((value) => !value)} onDone={() => { setRunning(false); toggleComplete(focusTask); setFocusId(null); }} onClose={() => { setRunning(false); setFocusId(null); }} />}
       {notificationPermission !== "granted" && ready && showReminderPrompt && <div className="reminder-prompt"><span>◎</span><div><strong>Stay gently accountable</strong><small>Turn on reminders for tasks that still need focus.</small></div><button onClick={enableNotifications}>Enable</button><button className="dismiss" onClick={() => setShowReminderPrompt(false)} aria-label="Dismiss">×</button></div>}
     </main>

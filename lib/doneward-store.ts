@@ -5,7 +5,9 @@ export type Task = {
   importance: Importance; reminderMinutes: number; nextReminderAt: number; completed: boolean; completedAt?: number; createdAt: number;
   source?: "manual" | "outline" | "brightspace"; sourceUid?: string; course?: string | null; assessmentType?: AssessmentType; originalDeadline?: string;
   plannedDate?: string;
+  updatedAt: number;
 };
+export type DeletedTask = { id: string; deletedAt: number };
 export type DraftAssessment = {
   id: string; taskName: string; category: AssessmentType; deadline: string;
 };
@@ -32,8 +34,22 @@ async function putValue<T>(key: string, value: T) {
   const db = await openDb();
   return new Promise<void>((resolve, reject) => { const transaction = db.transaction(STORE, "readwrite"); transaction.objectStore(STORE).put(value, key); transaction.oncomplete = () => resolve(); transaction.onerror = () => reject(transaction.error); });
 }
-export const loadTasks = () => getValue<Task[]>("tasks");
+export function normalizeTask(task: Task): Task {
+  return { ...task, updatedAt: task.updatedAt || task.createdAt || Date.now() };
+}
+export async function loadTasks() {
+  const tasks = await getValue<Task[]>("tasks");
+  return tasks?.map(normalizeTask);
+}
 export const saveTasks = (tasks: Task[]) => putValue("tasks", tasks);
+export const loadDeletedTasks = async () => await getValue<DeletedTask[]>("deleted-tasks") ?? [];
+export const saveDeletedTasks = (tasks: DeletedTask[]) => putValue("deleted-tasks", tasks);
+export async function rememberTaskDeletion(id: string, deletedAt = Date.now()) {
+  const current = await loadDeletedTasks();
+  const existing = current.find((item) => item.id === id);
+  if (existing && existing.deletedAt >= deletedAt) return;
+  await saveDeletedTasks([...current.filter((item) => item.id !== id), { id, deletedAt }]);
+}
 export const loadOutlineDrafts = () => getValue<DraftCourse[]>("outline-drafts");
 export const saveOutlineDrafts = (drafts: DraftCourse[]) => putValue("outline-drafts", drafts);
 export const loadBackendPairingToken = () => getValue<string>("backend-pairing-token");

@@ -5,14 +5,17 @@
 Doneward currently has three cooperating pieces:
 
 1. A vinext/React web application renders the planner and import review interface.
-2. IndexedDB stores tasks and unconfirmed course drafts in the local browser profile.
+2. IndexedDB caches tasks for offline use and stores unconfirmed course drafts in the local browser profile.
 3. A private localhost backend extracts PDF text and asks a local Ollama model for structured task data.
+4. The hosted app synchronizes confirmed tasks to user-scoped D1 storage through an authenticated same-origin API.
 
 ## Data flow
 
 ### Planner data
 
-The interface calls `lib/doneward-store.ts`, which reads and writes the `doneward-db` IndexedDB database. Tasks are not sent to an application backend in the current prototype.
+The interface reads and writes the `doneward-db` IndexedDB cache first, so task changes remain usable during a temporary network failure. On the hosted Site, `lib/task-sync.ts` sends normalized tasks and deletion tombstones to `/api/tasks`. The API derives the stable owner ID from platform-authenticated headers, validates every field, and upserts only that user's D1 rows. Local development has no platform identity and therefore remains device-only.
+
+Last-write-wins timestamps resolve changes made on different devices. Deleted task tombstones prevent an older offline copy from silently recreating a deleted task. D1 is the authoritative production copy; IndexedDB is the offline cache.
 
 ### Course-outline import
 
@@ -37,11 +40,11 @@ The interface calls `lib/doneward-store.ts`, which reads and writes the `donewar
 
 ## Runtime and deployment
 
-The production build uses vinext and a Cloudflare Worker entry point. `.openai/hosting.json` declares the Sites project. D1 scaffolding is present for future server persistence but is not used by the current planner data path.
+The production build uses vinext and a Cloudflare Worker entry point. `.openai/hosting.json` declares the Sites project and the logical `DB` D1 binding. Drizzle schema and migrations define user and task records; the hosting platform owns the real database resource and applies the packaged migrations.
 
 ## Future architecture work
 
-- Add authenticated server persistence and per-user authorization for cross-device sync.
+- Add account export and deletion controls for the cloud task copy.
 - Define document retention and deletion controls before server-side PDF storage.
 - Replace the transitional inline-script CSP allowance with nonces when the hosting runtime supports them end to end.
 - Add structured local audit events without document text or task contents.
