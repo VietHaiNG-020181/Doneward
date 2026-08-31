@@ -11,3 +11,10 @@ export function getDb() {
 
   return drizzle(env.DB, { schema });
 }
+
+export function getD1(): D1Database {
+  if (!env.DB) {
+    throw new Error("Cloud storage is temporarily unavailable.");
+  }
+  return env.DB;
+}

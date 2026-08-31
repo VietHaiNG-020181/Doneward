@@ -4,6 +4,7 @@
 import { ChangeEvent, DragEvent, useEffect, useMemo, useState } from "react";
 import { ASSESSMENT_CATEGORIES, createAssessment, formatFileSize, normalizeGptExtraction, targetMinutesFor, type GptOutlineExtraction } from "@/lib/outline-import";
 import { loadBackendPairingToken, loadOutlineDrafts, loadTasks, saveBackendPairingToken, saveOutlineDrafts, saveTasks, type DraftAssessment, type DraftCourse, type Task } from "@/lib/doneward-store";
+import { synchronizeTasks } from "@/lib/task-sync";
 
 type Notice = { tone: "success" | "error" | "info"; text: string } | null;
 type BackendState = "checking" | "ready" | "unpaired" | "missing";
@@ -157,8 +158,11 @@ export default function ImportTasksPage() {
       nextReminderAt: now + 60 * 60000, completed: false, createdAt: now + index, source: "outline",
       sourceUid: `local:${taskKey(selected.courseName, item.taskName, item.deadline)}`, course: selected.courseName.trim(),
       assessmentType: item.category, originalDeadline: item.deadline,
+      updatedAt: now + index,
     }));
-    await saveTasks([...saved, ...imported]);
+    const nextTasks = [...saved, ...imported];
+    await saveTasks(nextTasks);
+    void synchronizeTasks(nextTasks).catch(() => undefined);
     const skippedWithoutDeadline = selected.assessments.filter((item) => item.taskName.trim() && !item.deadline).length;
     const duplicates = scheduled.length - imported.length;
     const remaining = drafts.filter((draft) => draft.id !== selected.id); setDrafts(remaining); setSelectedId(remaining[0]?.id ?? null);

@@ -12,7 +12,8 @@ If private reporting is unavailable, contact the repository owner privately befo
 
 ## Security model
 
-- Planner data is stored in the user's browser through IndexedDB.
+- Hosted planner data is stored in per-user D1 rows behind a same-origin authenticated API; IndexedDB is an offline cache.
+- The task API derives ownership only from platform-authenticated request headers, never from a browser-supplied user ID.
 - Ollama and the extraction service bind only to loopback and must never be exposed through a public tunnel, router rule, or `0.0.0.0` binding.
 - Browser calls to the extraction service require both an exact allowlisted origin and a device-generated pairing token.
 - PDF uploads are not retained. The service validates the PDF signature and applies byte, page, request-rate, socket-timeout, and single-extraction limits before local model use.
@@ -36,8 +37,8 @@ Before publishing or deploying:
 
 ## Known limitations
 
-- Browser-local storage is not an encrypted backup and is available to the local browser profile.
-- The prototype does not yet provide cross-device synchronization, account deletion, or server-side per-user authorization.
+- Browser-local storage is not encrypted and is available to the local browser profile. The hosted D1 copy is the durable production record.
+- Cross-device task synchronization is available on the hosted Site, but account export and deletion controls are not yet exposed in the interface.
 - Code served by the trusted hosting origin necessarily runs with access to that origin's IndexedDB and pairing token. Hosting-account security and dependency integrity remain part of the trust boundary.
 - The CSP currently permits inline framework bootstrap scripts. Moving to per-response nonces is future defense in depth.
 - Pairing does not protect against malware already running as the same macOS user.

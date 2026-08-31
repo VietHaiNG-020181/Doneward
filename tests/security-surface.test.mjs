@@ -18,3 +18,21 @@ test("the import client uses an authenticated loopback request", async () => {
   assert.match(source, /targetAddressSpace:\s*"loopback"/);
   assert.match(source, /Authorization:\s*`Bearer \$\{token\}`/);
 });
+
+test("cloud task storage derives ownership from authenticated headers", async () => {
+  const source = await readFile(new URL("../app/api/tasks/route.ts", import.meta.url), "utf8");
+  assert.match(source, /getChatGPTUser/);
+  assert.match(source, /user\.userId/);
+  assert.doesNotMatch(source, /input\.userId|payload\.userId/);
+  assert.match(source, /sec-fetch-site/);
+  assert.match(source, /MAX_SYNC_TASKS/);
+});
+
+test("offline synchronization retains deletion tombstones", async () => {
+  const store = await readFile(new URL("../lib/doneward-store.ts", import.meta.url), "utf8");
+  const sync = await readFile(new URL("../lib/task-sync.ts", import.meta.url), "utf8");
+  assert.match(store, /deleted-tasks/);
+  assert.match(store, /rememberTaskDeletion/);
+  assert.match(sync, /credentials:\s*"same-origin"/);
+  assert.match(sync, /saveDeletedTasks/);
+});

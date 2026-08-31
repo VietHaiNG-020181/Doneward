@@ -8,7 +8,7 @@ The current prototype runs as a responsive web app and stores planner data in th
 
 - Today, Upcoming, Backlog, and completed task views
 - Manual priority, deadline, course, and focus-duration controls
-- Persistent browser storage through IndexedDB
+- Offline browser caching through IndexedDB with authenticated cloud synchronization in production
 - PDF course-outline import with structured review
 - Private local Ollama extraction for text-based PDFs
 - Installable web-app metadata and local browser persistence
@@ -54,7 +54,8 @@ Always review the returned course name, task names, categories, and deadlines be
 
 ## Data and privacy
 
-- Planner tasks and import drafts stay in the browser's IndexedDB in the current prototype.
+- Planner tasks use authenticated, per-user D1 storage on the hosted app, with IndexedDB as an offline cache. Local development remains device-only when no Sites identity is present.
+- Import drafts stay in browser IndexedDB. Original PDFs and extracted text are processed locally and are not retained.
 - PDFs are processed in memory by the localhost backend and are not retained.
 - The backend and Ollama bind only to the loopback interface.
 - The pairing token is generated on the Mac with owner-only file permissions and stored by the paired browser in IndexedDB.
