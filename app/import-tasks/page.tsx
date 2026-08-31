@@ -141,7 +141,14 @@ export default function ImportTasksPage() {
   function updateCourse(patch: Partial<DraftCourse>) { if (selected) setDrafts((current) => current.map((draft) => draft.id === selected.id ? { ...draft, ...patch } : draft)); }
   function updateAssessment(id: string, patch: Partial<DraftAssessment>) { if (selected) updateCourse({ assessments: selected.assessments.map((item) => item.id === id ? { ...item, ...patch } : item) }); }
   function removeAssessment(id: string) { if (selected) updateCourse({ assessments: selected.assessments.filter((item) => item.id !== id) }); }
-  function removeCourse() { if (!selected) return; const remaining = drafts.filter((draft) => draft.id !== selected.id); setDrafts(remaining); setSelectedId(remaining[0]?.id ?? null); setNotice({ tone: "info", text: "Draft removed." }); }
+  function removeCourse() {
+    if (!selected) return;
+    const remaining = drafts.filter((draft) => draft.id !== selected.id);
+    setDrafts(remaining);
+    setSelectedId(remaining[0]?.id ?? null);
+    void saveOutlineDrafts(remaining).catch(() => undefined);
+    setNotice({ tone: "info", text: "Pending draft removed." });
+  }
 
   async function confirmCourse() {
     if (!selected) return;
@@ -206,7 +213,7 @@ export default function ImportTasksPage() {
           <div className="extraction-state success"><span>✓</span><div><strong>{selected.assessments.length} task{selected.assessments.length === 1 ? "" : "s"} extracted locally</strong><p>Review the four requested fields below, then import the confirmed deadlines.</p></div></div>
           <div className="assessment-heading"><div><h3>Course tasks</h3><p>Unknown deadlines stay blank until you fill them in.</p></div><button className="secondary-button" onClick={() => updateCourse({ assessments: [...selected.assessments, createAssessment()] })}>+ Add task</button></div>
           <div className="assessment-list">{selected.assessments.length === 0 ? <div className="assessment-empty">No tasks were returned. Add one manually or retry the outline.</div> : selected.assessments.map((item, index) => <article className="assessment-row assessment-row-simple" key={item.id}><div className="assessment-number">{index + 1}</div><label>Task name<input value={item.taskName} onChange={(event) => updateAssessment(item.id, { taskName: event.target.value })} placeholder="e.g. Assignment 1" /></label><label>Category<select value={item.category} onChange={(event) => updateAssessment(item.id, { category: event.target.value as DraftAssessment["category"] })}>{ASSESSMENT_CATEGORIES.map((category) => <option value={category} key={category}>{category[0].toUpperCase() + category.slice(1)}</option>)}</select></label><label>Deadline<input value={item.deadline} onChange={(event) => updateAssessment(item.id, { deadline: event.target.value })} placeholder="YYYY-MM-DD or date + time" /></label><button className="remove-assessment" onClick={() => removeAssessment(item.id)} aria-label={`Remove task ${index + 1}`}>×</button></article>)}</div>
-          <footer className="review-footer"><p>Imported tasks start as <strong>Unprioritized</strong>, and Doneward orders them by urgency and nearest deadline.</p><div><a className="secondary-button" href="/">Cancel</a><button className="primary-button" onClick={confirmCourse}>Import tasks</button></div></footer>
+          <footer className="review-footer"><p>Imported tasks start as <strong>Unprioritized</strong>, and Doneward orders them by urgency and nearest deadline.</p><div><button className="secondary-button" type="button" onClick={removeCourse}>Cancel</button><button className="primary-button" onClick={confirmCourse}>Import tasks</button></div></footer>
         </section>
       </div>}
     </section>
