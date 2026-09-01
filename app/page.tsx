@@ -23,11 +23,19 @@ function deadlineDate(value: string | number) {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T23:59:59`) : new Date(value);
 }
 
+function deadlineTimestamp(value: string | number) {
+  if (value === "TBD") return null;
+  const timestamp = deadlineDate(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
 function urgency(task: Task) {
   if (task.completed) return -Infinity;
-  const minutesLeft = (deadlineDate(task.deadline).getTime() - Date.now()) / 60000;
   const workLeft = Math.max(0, task.targetMinutes - task.focusedSeconds / 60);
   const importance = { Unprioritized: -10, Low: 0, Medium: 18, High: 36 }[task.importance];
+  const timestamp = deadlineTimestamp(task.deadline);
+  if (timestamp === null) return -1000 + importance + workLeft / 100;
+  const minutesLeft = (timestamp - Date.now()) / 60000;
   if (minutesLeft <= 0) return 10000 + importance + workLeft;
   const pressure = workLeft / Math.max(minutesLeft, 1);
   const proximity = 2400 / Math.max(minutesLeft, 30);
@@ -35,6 +43,7 @@ function urgency(task: Task) {
 }
 
 function isToday(value: string | number) {
+  if (deadlineTimestamp(value) === null) return false;
   const date = deadlineDate(value);
   const today = new Date();
   return date.toDateString() === today.toDateString();
@@ -77,6 +86,7 @@ function mergeSyncedTasks(current: Task[], remote: Task[], deleted: Array<{ id: 
 }
 
 function deadlineLabel(value: string) {
+  if (deadlineTimestamp(value) === null) return "TBD";
   const date = deadlineDate(value);
   const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
   if (dateOnly) {
@@ -188,11 +198,18 @@ export default function Home() {
   const currentDay = todayKey();
   const todayTasks = activeTasks.filter((task) => task.plannedDate === currentDay);
   const nextTask = view === "today" ? todayTasks[0] : activeTasks[0];
-  const upcomingTasks = activeTasks.filter((task) => !isToday(task.deadline) && deadlineDate(task.deadline).getTime() >= clock);
+  const upcomingTasks = activeTasks.filter((task) => {
+    const timestamp = deadlineTimestamp(task.deadline);
+    return timestamp === null || (!isToday(task.deadline) && timestamp >= clock);
+  });
   const visibleTasks = view === "today" ? todayTasks : view === "upcoming" ? upcomingTasks : view === "history" ? completed : activeTasks;
   const focusTask = tasks.find((task) => task.id === focusId);
   const remainingToday = todayTasks.reduce((sum, task) => sum + Math.max(0, task.targetMinutes - task.focusedSeconds / 60), 0);
   const currentDate = clock ? new Date(clock) : null;
+  const groupOptions = useMemo(() => {
+    const groups = new Set(tasks.map(courseGroup).filter((group) => group !== "Personal"));
+    return [...groups].sort((left, right) => left.localeCompare(right)).map((label) => ({ label, value: label }));
+  }, [tasks]);
 
   function saveTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -200,12 +217,15 @@ export default function Home() {
     const existing = editing !== "new" ? editing : null;
     const reminderMinutes = Number(form.get("reminderMinutes"));
     const now = Date.now();
+    const selectedGroup = String(form.get("course") ?? "");
+    const course = (selectedGroup === "__new__" ? String(form.get("newCourse") ?? "") : selectedGroup).trim();
+    const deadline = form.get("deadlineTbd") ? "TBD" : String(form.get("deadline"));
     const task: Task = {
       id: existing?.id ?? crypto.randomUUID(), title: String(form.get("title")).trim(), notes: String(form.get("notes")).trim(),
-      deadline: String(form.get("deadline")), targetMinutes: Number(form.get("targetMinutes")), focusedSeconds: existing?.focusedSeconds ?? 0,
+      deadline, targetMinutes: Number(form.get("targetMinutes")), focusedSeconds: existing?.focusedSeconds ?? 0,
       importance: form.get("importance") as Importance, reminderMinutes, nextReminderAt: now + reminderMinutes * 60000,
       completed: existing?.completed ?? false, completedAt: existing?.completedAt, createdAt: existing?.createdAt ?? now,
-      source: existing?.source ?? "manual", sourceUid: existing?.sourceUid, course: existing?.course, assessmentType: existing?.assessmentType, originalDeadline: existing?.originalDeadline,
+      source: existing?.source ?? "manual", sourceUid: existing?.sourceUid, course: course || undefined, assessmentType: existing?.assessmentType, originalDeadline: existing?.originalDeadline,
       plannedDate: existing?.plannedDate ?? (view === "today" ? currentDay : undefined),
       updatedAt: now,
     };
@@ -280,7 +300,7 @@ export default function Home() {
         </section>
       </section>
 
-      {editing && <TaskModal task={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} onSave={saveTask} onDelete={editing === "new" ? undefined : () => void deleteTask(editing)} />}
+      {editing && <TaskModal task={editing === "new" ? undefined : editing} groups={groupOptions} onClose={() => setEditing(null)} onSave={saveTask} onDelete={editing === "new" ? undefined : () => void deleteTask(editing)} />}
       {focusTask && <FocusModal task={focusTask} running={running} onToggle={() => setRunning((value) => !value)} onDone={() => { setRunning(false); toggleComplete(focusTask); setFocusId(null); }} onClose={() => { setRunning(false); setFocusId(null); }} />}
       {notificationPermission !== "granted" && ready && showReminderPrompt && <div className="reminder-prompt"><span>◎</span><div><strong>Stay gently accountable</strong><small>Turn on reminders for tasks that still need focus.</small></div><button onClick={enableNotifications}>Enable</button><button className="dismiss" onClick={() => setShowReminderPrompt(false)} aria-label="Dismiss">×</button></div>}
     </main>
@@ -306,19 +326,22 @@ function Progress({ task }: { task: Task }) {
 function TaskCard({ task, now, urgent, plannedToday, showTodayAction, onComplete, onFocus, onEdit, onToggleToday }: { task: Task; now: number; urgent?: boolean; plannedToday?: boolean; showTodayAction?: boolean; onComplete: () => void; onFocus: () => void; onEdit: () => void; onToggleToday?: () => void }) {
   const remaining = task.targetMinutes - task.focusedSeconds / 60;
   const progress = Math.min(100, Math.round(task.focusedSeconds / 60 / Math.max(1, task.targetMinutes) * 100));
-  const overdue = deadlineDate(task.deadline).getTime() < now && !task.completed;
+  const deadlineTime = deadlineTimestamp(task.deadline);
+  const overdue = deadlineTime !== null && deadlineTime < now && !task.completed;
   return <article className={`task-card ${urgent ? "urgent" : ""} ${task.completed ? "done" : ""}`}>
     <button className="check" onClick={onComplete} aria-label={`${task.completed ? "Reopen" : "Complete"} ${task.title}`}>{task.completed ? "✓" : ""}</button>
-    <div className="task-main" onDoubleClick={onEdit}><h3>{task.title}</h3>{task.course && <span className="course-line">{task.course} · {task.assessmentType}</span>}<p>{task.completed ? (task.targetMinutes ? `${formatDuration(task.focusedSeconds / 60)} focused` : "Completed") : task.targetMinutes ? `${formatDuration(remaining)} remaining of ${formatDuration(task.targetMinutes)}` : "Deadline only"}</p>{!task.completed && task.targetMinutes > 0 && <div className="bar"><span style={{ width: `${progress}%` }} /></div>}</div>
-    <div className="task-meta"><span className={`tag ${overdue || urgent ? "coral" : !isToday(task.deadline) ? "blue" : ""}`}>{deadlineLabel(task.deadline)}</span><span>{task.importance}</span></div>
+    <div className="task-main" onDoubleClick={onEdit}><h3>{task.title}</h3>{task.course && <span className="course-line">{[task.course, task.assessmentType].filter(Boolean).join(" · ")}</span>}<p>{task.completed ? (task.targetMinutes ? `${formatDuration(task.focusedSeconds / 60)} focused` : "Completed") : task.targetMinutes ? `${formatDuration(remaining)} remaining of ${formatDuration(task.targetMinutes)}` : "Deadline only"}</p>{!task.completed && task.targetMinutes > 0 && <div className="bar"><span style={{ width: `${progress}%` }} /></div>}</div>
+    <div className="task-meta"><span className={`tag ${deadlineTime === null ? "tbd" : overdue || urgent ? "coral" : !isToday(task.deadline) ? "blue" : ""}`}>{deadlineLabel(task.deadline)}</span><span>{task.importance}</span></div>
     {showTodayAction && !task.completed && <button className={`today-toggle ${plannedToday ? "selected" : ""}`} onClick={onToggleToday} aria-label={`${plannedToday ? "Remove" : "Add"} ${task.title} ${plannedToday ? "from" : "to"} Today`}>{plannedToday ? "✓ Today" : "+ Today"}</button>}
     {!task.completed && task.targetMinutes > 0 && <button className="mini-focus" onClick={onFocus} aria-label={`Focus on ${task.title}`}>▶</button>}<button className="more" onClick={onEdit} aria-label={`Edit ${task.title}`}>···</button>
   </article>;
 }
 
-function TaskModal({ task, onClose, onSave, onDelete }: { task?: Task; onClose: () => void; onSave: (event: FormEvent<HTMLFormElement>) => void; onDelete?: () => void }) {
+function TaskModal({ task, groups, onClose, onSave, onDelete }: { task?: Task; groups: Array<{ label: string; value: string }>; onClose: () => void; onSave: (event: FormEvent<HTMLFormElement>) => void; onDelete?: () => void }) {
+  const [deadlineTbd, setDeadlineTbd] = useState(task?.deadline === "TBD");
+  const [groupChoice, setGroupChoice] = useState(task ? courseGroup(task) : "");
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="task-modal-title"><div className="modal-head"><div><span className="label dark">{task ? "EDIT TASK" : "NEW TASK"}</span><h2 id="task-modal-title">{task ? "Shape the next step" : "What needs your focus?"}</h2></div><button onClick={onClose} aria-label="Close">×</button></div>
-    <form onSubmit={onSave}><label>Task name<input name="title" defaultValue={task?.title} placeholder="e.g. Draft project proposal" required /></label><label>Notes<textarea name="notes" defaultValue={task?.notes} placeholder="A useful first step, context, or definition of done" rows={3} /></label><div className="form-grid"><label>Deadline<input type={task?.deadline && /^\d{4}-\d{2}-\d{2}$/.test(task.deadline) ? "date" : "datetime-local"} name="deadline" defaultValue={task?.deadline ?? dateAt(0, 17)} required /></label><label>Focus target<select name="targetMinutes" defaultValue={task?.targetMinutes ?? 60}><option value="0">Deadline only</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60">1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option><option value="180">3 hours</option><option value="240">4 hours</option></select></label><label>Importance<select name="importance" defaultValue={task?.importance ?? "Medium"}><option>Unprioritized</option><option>Low</option><option>Medium</option><option>High</option></select></label><label>Remind me<select name="reminderMinutes" defaultValue={task?.reminderMinutes ?? 30}><option value="10">Every 10 minutes</option><option value="30">Every 30 minutes</option><option value="60">Every hour</option><option value="120">Every 2 hours</option></select></label></div><div className="modal-actions">{onDelete && <button type="button" className="delete-button" onClick={onDelete}>Delete</button>}<span /><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit">{task ? "Save changes" : "Add task"}</button></div></form>
+    <form onSubmit={onSave}><label>Task name<input name="title" defaultValue={task?.title} placeholder="e.g. Draft project proposal" required /></label><label>Notes<textarea name="notes" defaultValue={task?.notes} placeholder="A useful first step, context, or definition of done" rows={3} /></label><div className="form-grid"><label>Group<select name="course" value={groupChoice} onChange={(event) => setGroupChoice(event.target.value)}><option value="">Personal</option>{groups.map((group) => <option value={group.value} key={group.value}>{group.label}</option>)}<option value="__new__">+ New group</option></select></label>{groupChoice === "__new__" && <label>New group<input name="newCourse" placeholder="e.g. Math" maxLength={200} required /></label>}<label>Deadline<input type={task?.deadline && /^\d{4}-\d{2}-\d{2}$/.test(task.deadline) ? "date" : "datetime-local"} name="deadline" defaultValue={task?.deadline === "TBD" ? "" : task?.deadline ?? dateAt(0, 17)} disabled={deadlineTbd} required={!deadlineTbd} /></label><label className="tbd-toggle"><span>Deadline status</span><span><input type="checkbox" name="deadlineTbd" checked={deadlineTbd} onChange={(event) => setDeadlineTbd(event.target.checked)} /> No date yet (TBD)</span></label><label>Focus target<select name="targetMinutes" defaultValue={task?.targetMinutes ?? 60}><option value="0">Deadline only</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60">1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option><option value="180">3 hours</option><option value="240">4 hours</option></select></label><label>Importance<select name="importance" defaultValue={task?.importance ?? "Medium"}><option>Unprioritized</option><option>Low</option><option>Medium</option><option>High</option></select></label><label>Remind me<select name="reminderMinutes" defaultValue={task?.reminderMinutes ?? 30}><option value="10">Every 10 minutes</option><option value="30">Every 30 minutes</option><option value="60">Every hour</option><option value="120">Every 2 hours</option></select></label></div><div className="modal-actions">{onDelete && <button type="button" className="delete-button" onClick={onDelete}>Delete</button>}<span /><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit">{task ? "Save changes" : "Add task"}</button></div></form>
   </section></div>;
 }
 

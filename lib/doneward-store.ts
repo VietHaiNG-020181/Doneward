@@ -35,7 +35,7 @@ async function putValue<T>(key: string, value: T) {
   return new Promise<void>((resolve, reject) => { const transaction = db.transaction(STORE, "readwrite"); transaction.objectStore(STORE).put(value, key); transaction.oncomplete = () => resolve(); transaction.onerror = () => reject(transaction.error); });
 }
 export function normalizeTask(task: Task): Task {
-  return { ...task, updatedAt: task.updatedAt || task.createdAt || Date.now() };
+  return { ...task, deadline: task.deadline || "TBD", updatedAt: task.updatedAt || task.createdAt || Date.now() };
 }
 export async function loadTasks() {
   const tasks = await getValue<Task[]>("tasks");
