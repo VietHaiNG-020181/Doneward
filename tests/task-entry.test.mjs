@@ -20,3 +20,9 @@ test("TBD deadlines are accepted by cloud synchronization", async () => {
   const source = await readFile(new URL("../app/api/tasks/route.ts", import.meta.url), "utf8");
   assert.match(source, /const DEADLINE = \/\^\(\?:TBD\|/);
 });
+
+test("import review rows remain inside the review panel at narrow desktop widths", async () => {
+  const source = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(source, /\.assessment-row\.assessment-row-simple\{grid-template-columns:25px minmax\(0,1fr\)/);
+  assert.match(source, /\.assessment-row>\*\{min-width:0\}/);
+});
