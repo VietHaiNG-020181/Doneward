@@ -153,27 +153,27 @@ export default function ImportTasksPage() {
   async function confirmCourse() {
     if (!selected) return;
     if (!selected.courseName.trim()) { setNotice({ tone: "error", text: "Add the course name before importing." }); return; }
-    const scheduled = selected.assessments.filter((item) => item.taskName.trim() && item.deadline);
-    if (!scheduled.length) { setNotice({ tone: "error", text: "Add at least one task with a name and deadline." }); return; }
+    const importable = selected.assessments.filter((item) => item.taskName.trim());
+    if (!importable.length) { setNotice({ tone: "error", text: "Add at least one task name before importing." }); return; }
     const saved = await loadTasks() ?? [];
     const taskKey = (course: string, title: string, deadline: string) => `${course.trim().toLowerCase()}|${title.trim().toLowerCase()}|${deadline}`;
     const existing = new Set(saved.map((task) => taskKey(task.course ?? "", task.title, task.deadline)));
     const now = Date.now();
-    const imported: Task[] = scheduled.filter((item) => !existing.has(taskKey(selected.courseName, item.taskName, item.deadline))).map((item, index) => ({
-      id: crypto.randomUUID(), title: item.taskName.trim(), notes: "Imported through the private local outline extractor", deadline: item.deadline,
+    const imported: Task[] = importable.filter((item) => !existing.has(taskKey(selected.courseName, item.taskName, item.deadline || "TBD"))).map((item, index) => ({
+      id: crypto.randomUUID(), title: item.taskName.trim(), notes: "Imported through the private local outline extractor", deadline: item.deadline || "TBD",
       targetMinutes: targetMinutesFor(item.category), focusedSeconds: 0, importance: "Unprioritized", reminderMinutes: 60,
       nextReminderAt: now + 60 * 60000, completed: false, createdAt: now + index, source: "outline",
-      sourceUid: `local:${taskKey(selected.courseName, item.taskName, item.deadline)}`, course: selected.courseName.trim(),
-      assessmentType: item.category, originalDeadline: item.deadline,
+      sourceUid: `local:${taskKey(selected.courseName, item.taskName, item.deadline || "TBD")}`, course: selected.courseName.trim(),
+      assessmentType: item.category, originalDeadline: item.deadline || undefined,
       updatedAt: now + index,
     }));
     const nextTasks = [...saved, ...imported];
     await saveTasks(nextTasks);
     void synchronizeTasks(nextTasks).catch(() => undefined);
-    const skippedWithoutDeadline = selected.assessments.filter((item) => item.taskName.trim() && !item.deadline).length;
-    const duplicates = scheduled.length - imported.length;
+    const tbdCount = importable.filter((item) => !item.deadline).length;
+    const duplicates = importable.length - imported.length;
     const remaining = drafts.filter((draft) => draft.id !== selected.id); setDrafts(remaining); setSelectedId(remaining[0]?.id ?? null);
-    const details = [skippedWithoutDeadline ? `${skippedWithoutDeadline} without a deadline skipped` : "", duplicates ? `${duplicates} duplicate${duplicates === 1 ? "" : "s"} skipped` : ""].filter(Boolean).join("; ");
+    const details = [tbdCount ? `${tbdCount} saved with a TBD deadline` : "", duplicates ? `${duplicates} duplicate${duplicates === 1 ? "" : "s"} skipped` : ""].filter(Boolean).join("; ");
     setNotice({ tone: "success", text: `${imported.length} task${imported.length === 1 ? "" : "s"} added to your plan${details ? `. ${details}` : ""}.` });
   }
 
@@ -211,9 +211,9 @@ export default function ImportTasksPage() {
           <div className="review-panel-head"><div><p className="eyebrow">REVIEW DRAFT</p><h2>{courseLabel(selected)}</h2><span>{selected.fileName} · {formatFileSize(selected.fileSize)}</span></div><button className="delete-button" onClick={removeCourse}>Remove draft</button></div>
           <div className="course-fields course-fields-simple"><label>Course name<input value={selected.courseName} onChange={(event) => updateCourse({ courseName: event.target.value })} placeholder="e.g. Software Engineering" /></label></div>
           <div className="extraction-state success"><span>✓</span><div><strong>{selected.assessments.length} task{selected.assessments.length === 1 ? "" : "s"} extracted locally</strong><p>Review the four requested fields below, then import the confirmed deadlines.</p></div></div>
-          <div className="assessment-heading"><div><h3>Course tasks</h3><p>Use the calendar to correct any date the local AI could not identify.</p></div><button className="secondary-button" onClick={() => updateCourse({ assessments: [...selected.assessments, createAssessment()] })}>+ Add task</button></div>
+          <div className="assessment-heading"><div><h3>Course tasks</h3><p>Choose a date from the calendar, or leave it blank to import the task as TBD.</p></div><button className="secondary-button" onClick={() => updateCourse({ assessments: [...selected.assessments, createAssessment()] })}>+ Add task</button></div>
           <div className="assessment-list">{selected.assessments.length === 0 ? <div className="assessment-empty">No tasks were returned. Add one manually or retry the outline.</div> : selected.assessments.map((item, index) => <article className="assessment-row assessment-row-simple" key={item.id}><div className="assessment-number">{index + 1}</div><label>Task name<input value={item.taskName} onChange={(event) => updateAssessment(item.id, { taskName: event.target.value })} placeholder="e.g. Assignment 1" /></label><label>Category<select value={item.category} onChange={(event) => updateAssessment(item.id, { category: event.target.value as DraftAssessment["category"] })}>{ASSESSMENT_CATEGORIES.map((category) => <option value={category} key={category}>{category[0].toUpperCase() + category.slice(1)}</option>)}</select></label><label>Deadline<input type="datetime-local" step="60" value={item.deadline && /^\d{4}-\d{2}-\d{2}$/.test(item.deadline) ? `${item.deadline}T23:59` : item.deadline} onChange={(event) => updateAssessment(item.id, { deadline: event.target.value })} /></label><button className="remove-assessment" onClick={() => removeAssessment(item.id)} aria-label={`Remove task ${index + 1}`}>×</button></article>)}</div>
-          <footer className="review-footer"><p>Imported tasks start as <strong>Unprioritized</strong>, and Doneward orders them by urgency and nearest deadline.</p><div><button className="secondary-button" type="button" onClick={removeCourse}>Cancel</button><button className="primary-button" onClick={confirmCourse}>Import tasks</button></div></footer>
+          <footer className="review-footer"><p>Imported tasks start as <strong>Unprioritized</strong>. Tasks without confirmed dates are saved as <strong>TBD</strong> and placed after dated work.</p><div><button className="secondary-button" type="button" onClick={removeCourse}>Cancel</button><button className="primary-button" onClick={confirmCourse}>Import tasks</button></div></footer>
         </section>
       </div>}
     </section>
