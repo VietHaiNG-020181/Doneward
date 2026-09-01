@@ -12,7 +12,7 @@ const ASSESSMENT_TYPES = new Set<AssessmentType>([
   "assignment", "quiz", "test", "exam", "project", "lab", "paper", "presentation", "other",
 ]);
 const TASK_ID = /^[A-Za-z0-9_-]{1,100}$/;
-const DEADLINE = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?$/;
+const DEADLINE = /^(?:TBD|\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?)$/;
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 let schemaPromise: Promise<unknown> | null = null;
 
