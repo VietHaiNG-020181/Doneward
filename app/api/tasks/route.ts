@@ -1,6 +1,6 @@
 import { getChatGPTUser } from "@/app/chatgpt-auth";
 import { getD1 } from "@/db";
-import type { AssessmentType, Importance, Task } from "@/lib/doneward-store";
+import { normalizeTask, type AssessmentType, type Importance, type Task } from "@/lib/doneward-store";
 
 export const dynamic = "force-dynamic";
 
@@ -75,7 +75,7 @@ function optionalString(value: unknown, max: number): string | undefined | null 
 
 function sanitizeTask(value: unknown): Task | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const input = value as Record<string, unknown>;
+  const input = normalizeTask(value as Task) as Task & Record<string, unknown>;
   const id = boundedString(input.id, 100, false);
   const title = boundedString(input.title, 300, false);
   const notes = boundedString(input.notes, 4_000) ?? "";
